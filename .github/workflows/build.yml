@@ -25,9 +25,6 @@ jobs:
     name: 'Build & push backend image'
     runs-on: ubuntu-latest
     steps:
-      - name: 'Install node'
-        run: |
-          apk update && apk add --no-cache git docker docker-compose nodejs gpg openssh npm ansible
       - name: 'Checkout'
         uses: actions/checkout@v4
 
@@ -71,9 +68,6 @@ jobs:
     name: 'Build & push frontend image'
     runs-on: ubuntu-latest
     steps:
-      - name: 'Install node'
-        run: |
-          apk update && apk add --no-cache git docker docker-compose nodejs gpg openssh npm ansible
       - name: 'Checkout'
         uses: actions/checkout@v4
 
