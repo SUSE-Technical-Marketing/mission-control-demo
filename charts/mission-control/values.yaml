@@ -1,0 +1,108 @@
+airlock:
+  replicaCount: 1
+  image:
+    registry: registry.rigel.lab.geeko.me
+    repository: suse/space-station-control
+    tag: main
+    pullPolicy: Always
+  resources:
+    limits:
+      cpu: 100m
+      memory: 128Mi
+    requests:
+      cpu: 50m
+      memory: 64Mi
+
+gravity:
+  replicaCount: 1
+  image:
+    registry: registry.rigel.lab.geeko.me
+    repository: suse/space-station-control
+    tag: main
+    pullPolicy: Always
+  resources:
+    limits:
+      cpu: 100m
+      memory: 128Mi
+    requests:
+      cpu: 50m
+      memory: 64Mi
+
+lifeSupport:
+  replicaCount: 1
+  image:
+    registry: registry.rigel.lab.geeko.me
+    repository: suse/space-station-control
+    tag: main
+    pullPolicy: Always
+  resources:
+    limits:
+      cpu: 100m
+      memory: 128Mi
+    requests:
+      cpu: 50m
+      memory: 64Mi
+
+powerCore:
+  replicaCount: 2
+  image:
+    registry: registry.rigel.lab.geeko.me
+    repository: suse/space-station-control
+    tag: main
+    pullPolicy: Always
+  resources:
+    limits:
+      cpu: 100m
+      memory: 128Mi
+    requests:
+      cpu: 50m
+      memory: 64Mi
+
+frontend:
+  replicaCount: 1
+  image:
+    registry: registry.rigel.lab.geeko.me
+    repository: suse/space-station-ui
+    tag: main
+    pullPolicy: Always
+  resources:
+    limits:
+      cpu: 100m
+      memory: 128Mi
+    requests:
+      cpu: 50m
+      memory: 64Mi
+
+ingress:
+  enabled: true
+  className: nginx
+  host: mission-control.pollux.lab.geeko.me
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+  tls:
+    enabled: true
+    secretName: space-station-ui-tls
+
+env:
+  OTLP_ENDPOINT: "http://otel-collector.pollux.lab.geeko.me:4317"
+  API_BASE_URL: "https://api-mission-control.pollux.lab.geeko.me"
+  REDIS_HOST: "redis-headless.redis.svc.cluster.local"
+  REDIS_PORT: "6379"
+  REDIS_PASSWORD: "vxoTHNw8rUt09pyg"
+
+loadRunner:
+  enabled: true
+  image:
+    registry: registry.rigel.lab.geeko.me
+    repository: suse/space-station-load-runner
+    tag: main
+    pullPolicy: Always
+
+api:
+  ingress:
+    host: api-mission-control.castor.lab.geeko.me
+    annotations:
+      cert-manager.io/cluster-issuer: letsencrypt-prod
+    tls:
+      enabled: true
+      secretName: space-station-api-tls

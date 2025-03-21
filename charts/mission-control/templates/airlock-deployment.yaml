@@ -1,0 +1,40 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: airlock
+  labels:
+    app: airlock
+spec:
+  replicas: {{ .Values.airlock.replicaCount }}
+  selector:
+    matchLabels:
+      app: airlock
+  template:
+    metadata:
+      labels:
+        app: airlock
+    spec:
+      containers:
+        - name: airlock
+          image: "{{ .Values.airlock.image.registry }}/{{ .Values.airlock.image.repository }}:{{ .Values.airlock.image.tag }}"
+          imagePullPolicy: {{ default "IfNotPresent" .Values.airlock.image.pullPolicy }}
+          env:
+            - name: SERVICE
+              value: "airlock"
+            - name: OTLP_ENDPOINT
+              value: {{ .Values.env.OTLP_ENDPOINT | quote }}
+            - name: REDIS_HOST
+              value: {{ .Values.env.REDIS_HOST | quote }}
+            - name: REDIS_PORT
+              value: {{ .Values.env.REDIS_PORT | quote }}
+            - name: REDIS_PASSWORD
+              value: {{ .Values.env.REDIS_PASSWORD | quote }}
+          ports:
+            - containerPort: 3000
+          resources:
+            limits:
+              cpu: {{ .Values.airlock.resources.limits.cpu }}
+              memory: {{ .Values.airlock.resources.limits.memory }}
+            requests:
+              cpu: {{ .Values.airlock.resources.requests.cpu }}
+              memory: {{ .Values.airlock.resources.requests.memory }}

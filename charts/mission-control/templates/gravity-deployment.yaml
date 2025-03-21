@@ -1,0 +1,34 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: gravity
+  labels:
+    app: gravity
+spec:
+  replicas: {{ .Values.gravity.replicaCount }}
+  selector:
+    matchLabels:
+      app: gravity
+  template:
+    metadata:
+      labels:
+        app: gravity
+    spec:
+      containers:
+        - name: gravity
+          image: "{{ .Values.gravity.image.registry }}/{{ .Values.gravity.image.repository }}:{{ .Values.gravity.image.tag }}"
+          imagePullPolicy: {{ default "IfNotPresent" .Values.gravity.image.pullPolicy }}
+          env:
+            - name: SERVICE
+              value: "gravity"
+            - name: OTLP_ENDPOINT
+              value: "{{ .Values.env.OTLP_ENDPOINT }}"
+          ports:
+            - containerPort: 3000
+          resources:
+            limits:
+              cpu: {{ .Values.gravity.resources.limits.cpu }}
+              memory: {{ .Values.gravity.resources.limits.memory }}
+            requests:
+              cpu: {{ .Values.gravity.resources.requests.cpu }}
+              memory: {{ .Values.gravity.resources.requests.memory }}

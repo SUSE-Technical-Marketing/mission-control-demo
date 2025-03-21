@@ -1,0 +1,40 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: power-core
+  labels:
+    app: power-core
+spec:
+  replicas: {{ .Values.powerCore.replicaCount }}
+  selector:
+    matchLabels:
+      app: power-core
+  template:
+    metadata:
+      labels:
+        app: power-core
+    spec:
+      containers:
+        - name: power-core
+          image: "{{ .Values.powerCore.image.registry }}/{{ .Values.powerCore.image.repository }}:{{ .Values.powerCore.image.tag }}"
+          imagePullPolicy: {{ default "IfNotPresent" .Values.powerCore.image.pullPolicy }}
+          env:
+            - name: SERVICE
+              value: "powerCore"
+            - name: OTLP_ENDPOINT
+              value: {{ .Values.env.OTLP_ENDPOINT | quote }}
+          ports:
+            - containerPort: 3000
+          readinessProbe:  # ✅ Only send traffic to healthy power cores
+            httpGet:
+              path: /api/power-core/health
+              port: 3000
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          resources:
+            limits:
+              cpu: {{ .Values.powerCore.resources.limits.cpu }}
+              memory: {{ .Values.powerCore.resources.limits.memory }}
+            requests:
+              cpu: {{ .Values.powerCore.resources.requests.cpu }}
+              memory: {{ .Values.powerCore.resources.requests.memory }}

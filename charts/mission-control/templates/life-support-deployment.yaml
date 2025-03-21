@@ -1,0 +1,34 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: life-support
+  labels:
+    app: life-support
+spec:
+  replicas: {{ .Values.lifeSupport.replicaCount }}
+  selector:
+    matchLabels:
+      app: life-support
+  template:
+    metadata:
+      labels:
+        app: life-support
+    spec:
+      containers:
+        - name: life-support
+          image: "{{ .Values.lifeSupport.image.registry }}/{{ .Values.lifeSupport.image.repository }}:{{ .Values.lifeSupport.image.tag }}"
+          imagePullPolicy: {{ default "IfNotPresent" .Values.lifeSupport.image.pullPolicy }}
+          env:
+            - name: SERVICE
+              value: "lifeSupport"
+            - name: OTLP_ENDPOINT
+              value: "{{ .Values.env.OTLP_ENDPOINT }}"
+          ports:
+            - containerPort: 3000
+          resources:
+            limits:
+              cpu: {{ .Values.lifeSupport.resources.limits.cpu }}
+              memory: {{ .Values.lifeSupport.resources.limits.memory }}
+            requests:
+              cpu: {{ .Values.lifeSupport.resources.requests.cpu }}
+              memory: {{ .Values.lifeSupport.resources.requests.memory }}
