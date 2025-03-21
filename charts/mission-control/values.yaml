@@ -1,8 +1,8 @@
 airlock:
   replicaCount: 1
   image:
-    registry: registry.rigel.lab.geeko.me
-    repository: suse/space-station-control
+    registry: ghcr.io
+    repository: suse-technical-marketing/mission-control-backend
     tag: main
     pullPolicy: Always
   resources:
@@ -16,8 +16,8 @@ airlock:
 gravity:
   replicaCount: 1
   image:
-    registry: registry.rigel.lab.geeko.me
-    repository: suse/space-station-control
+    registry: ghcr.io
+    repository: suse-technical-marketing/mission-control-backend
     tag: main
     pullPolicy: Always
   resources:
@@ -31,8 +31,8 @@ gravity:
 lifeSupport:
   replicaCount: 1
   image:
-    registry: registry.rigel.lab.geeko.me
-    repository: suse/space-station-control
+    registry: ghcr.io
+    repository: suse-technical-marketing/mission-control-backend
     tag: main
     pullPolicy: Always
   resources:
@@ -46,8 +46,8 @@ lifeSupport:
 powerCore:
   replicaCount: 2
   image:
-    registry: registry.rigel.lab.geeko.me
-    repository: suse/space-station-control
+    registry: ghcr.io
+    repository: suse-technical-marketing/mission-control-backend
     tag: main
     pullPolicy: Always
   resources:
@@ -61,8 +61,8 @@ powerCore:
 frontend:
   replicaCount: 1
   image:
-    registry: registry.rigel.lab.geeko.me
-    repository: suse/space-station-ui
+    registry: ghcr.io
+    repository: suse-technical-marketing/mission-control-frontend
     tag: main
     pullPolicy: Always
   resources:
@@ -76,33 +76,17 @@ frontend:
 ingress:
   enabled: true
   className: nginx
-  host: mission-control.pollux.lab.geeko.me
+  host: mission-control.lab.geeko.me
   annotations:
     cert-manager.io/cluster-issuer: letsencrypt-prod
   tls:
     enabled: true
-    secretName: space-station-ui-tls
+    secretName: mission-control-tls
 
 env:
-  OTLP_ENDPOINT: "http://otel-collector.pollux.lab.geeko.me:4317"
-  API_BASE_URL: "https://api-mission-control.pollux.lab.geeko.me"
+  OTLP_ENDPOINT: "http://otel-collector.lab.geeko.me:4317"
+  API_BASE_URL: "https://mission-control.lab.geeko.me"
   REDIS_HOST: "redis-headless.redis.svc.cluster.local"
   REDIS_PORT: "6379"
   REDIS_PASSWORD: "vxoTHNw8rUt09pyg"
 
-loadRunner:
-  enabled: true
-  image:
-    registry: registry.rigel.lab.geeko.me
-    repository: suse/space-station-load-runner
-    tag: main
-    pullPolicy: Always
-
-api:
-  ingress:
-    host: api-mission-control.castor.lab.geeko.me
-    annotations:
-      cert-manager.io/cluster-issuer: letsencrypt-prod
-    tls:
-      enabled: true
-      secretName: space-station-api-tls
