@@ -1,0 +1,115 @@
+name: Build and Push Backend Services
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'backend/**'
+      - 'frontend/**'
+      - '.github/workflows/**'
+      - 'charts/**'
+  pull_request:
+
+env:
+  IMAGE_REG: ghcr.io
+  BACKEND_REPO: SUSE-Technical-Marketing/mission-control-backend
+  FRONTEND_REPO: SUSE-Technical-Marketing/mission-control-frontend
+
+permissions:
+  packages: write
+  statuses: write
+  checks: write
+
+jobs:
+
+  build-backend:
+    name: 'Build & push backend image'
+    runs-on: ubuntu-latest
+    steps:
+      - name: 'Install node'
+        run: |
+          apk update && apk add --no-cache git docker docker-compose nodejs gpg openssh npm ansible
+      - name: 'Checkout'
+        uses: actions/checkout@v4
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+      # https://github.com/docker/setup-buildx-action
+      - name: Set up Docker Buildx
+        id: buildx
+        uses: docker/setup-buildx-action@v3      # Uses the `docker/login-action` action to log in to the Container registry registry using the account and password that will publish the packages. Once published, the packages are scoped to the account defined here.
+      - name: Log in to the Container registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.IMAGE_REG}}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      # This step uses [docker/metadata-action](https://github.com/docker/metadata-action#about) to extract tags and labels that will be applied to the specified image. The `id` "meta" allows the output of this step to be referenced in a subsequent step. The `images` value provides the base name for the tags and labels.
+      - name: Extract metadata (tags, labels) for Docker
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.IMAGE_REG }}/${{ env.BACKEND_REPO }}
+          tags: |
+            type=ref,event=branch
+            type=ref,event=pr
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+
+      # This step uses the `docker/build-push-action` action to build the image, based on your repository's `Dockerfile`. If the build succeeds, it pushes the image to GitHub Packages.
+      # It uses the `context` parameter to define the build's context as the set of files located in the specified path. For more information, see "[Usage](https://github.com/docker/build-push-action#usage)" in the README of the `docker/build-push-action` repository.
+      # It uses the `tags` and `labels` parameters to tag and label the image with the output from the "meta" step.
+      - name: Build and push
+        uses: docker/build-push-action@v5
+        with:
+          context: backend/services
+          platforms: linux/amd64
+          file: backend/services/Dockerfile
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+  build-frontend:
+    name: 'Build & push frontend image'
+    runs-on: ubuntu-latest
+    steps:
+      - name: 'Install node'
+        run: |
+          apk update && apk add --no-cache git docker docker-compose nodejs gpg openssh npm ansible
+      - name: 'Checkout'
+        uses: actions/checkout@v4
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+      # https://github.com/docker/setup-buildx-action
+      - name: Set up Docker Buildx
+        id: buildx
+        uses: docker/setup-buildx-action@v3      # Uses the `docker/login-action` action to log in to the Container registry registry using the account and password that will publish the packages. Once published, the packages are scoped to the account defined here.
+      - name: Log in to the Container registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.IMAGE_REG}}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      # This step uses [docker/metadata-action](https://github.com/docker/metadata-action#about) to extract tags and labels that will be applied to the specified image. The `id` "meta" allows the output of this step to be referenced in a subsequent step. The `images` value provides the base name for the tags and labels.
+      - name: Extract metadata (tags, labels) for Docker
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.IMAGE_REG }}/${{ env.FRONTEND_REPO }}
+          tags: |
+            type=ref,event=branch
+            type=ref,event=pr
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+
+      # This step uses the `docker/build-push-action` action to build the image, based on your repository's `Dockerfile`. If the build succeeds, it pushes the image to GitHub Packages.
+      # It uses the `context` parameter to define the build's context as the set of files located in the specified path. For more information, see "[Usage](https://github.com/docker/build-push-action#usage)" in the README of the `docker/build-push-action` repository.
+      # It uses the `tags` and `labels` parameters to tag and label the image with the output from the "meta" step.
+      - name: Build and push
+        uses: docker/build-push-action@v5
+        with:
+          context: frontend
+          platforms: linux/amd64
+          file: frontend/Dockerfile
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}

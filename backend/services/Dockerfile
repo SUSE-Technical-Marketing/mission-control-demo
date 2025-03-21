@@ -1,4 +1,4 @@
-FROM registry.rigel.lab.geeko.me/application-collection/containers/nodejs:20-dev
+FROM registry.suse.com/bci/nodejs:22
 WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm install
