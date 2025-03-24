@@ -1,4 +1,6 @@
 apiVersion: v2
 name: space-station-control
 version: 1.0.1
+type: application
+appVersion: 1.0.1
 description: A Helm chart for deploying Space Station Control microservices
