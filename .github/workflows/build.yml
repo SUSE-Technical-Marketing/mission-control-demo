@@ -135,4 +135,4 @@ jobs:
       - name: Package and push helm chart
         run: |
           helm package ./charts/mission-control --version ${{ steps.set-variables.outputs.VERSION }}
-          helm push ./mission-control-chart-${{ steps.set-variables.outputs.VERSION }}.tgz oci://${{ steps.set-variables.outputs.REPOSITORY }}/charts
+          helm push ./mission-control-${{ steps.set-variables.outputs.VERSION }}.tgz oci://${{ steps.set-variables.outputs.REPOSITORY }}/charts
