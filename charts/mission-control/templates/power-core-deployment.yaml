@@ -4,6 +4,7 @@ metadata:
   name: power-core
   labels:
     app: power-core
+    app.kubernetes.io/name: mission-control
 spec:
   replicas: {{ .Values.powerCore.replicaCount }}
   selector:
@@ -13,6 +14,7 @@ spec:
     metadata:
       labels:
         app: power-core
+        app.kubernetes.io/name: mission-control
     spec:
       containers:
         - name: power-core

@@ -4,6 +4,7 @@ metadata:
   name: gravity
   labels:
     app: gravity
+    app.kubernetes.io/name: mission-control
 spec:
   replicas: {{ .Values.gravity.replicaCount }}
   selector:
@@ -13,6 +14,7 @@ spec:
     metadata:
       labels:
         app: gravity
+        app.kubernetes.io/name: mission-control
     spec:
       containers:
         - name: gravity
