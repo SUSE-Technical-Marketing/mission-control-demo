@@ -9,12 +9,14 @@ module.exports = () => {
     const app = express();
     app.use(cors());
 
+    const instabilityFactor = process.env.INSTABILITY_FACTOR ? parseFloat(process.env.INSTABILITY_FACTOR) : 0.3; // 30% chance of instability
+
     const POWER_CORE_ID = uuidv4(); // Generate a unique identifier for each Power Core instance
     let powerStatus = { status: "stable", message: "Power levels nominal." }; // Default state
 
     // Function to change power status every 30 seconds
     function updatePowerStatus() {
-        const isUnstable = Math.random() < 0.3; // 30% chance of becoming unstable
+        const isUnstable = Math.random() < instabilityFactor;
         powerStatus = isUnstable
             ? { status: "unstable", message: "Power fluctuations detected!" }
             : { status: "stable", message: "Power levels nominal." };

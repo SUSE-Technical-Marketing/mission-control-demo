@@ -57,6 +57,7 @@ powerCore:
     requests:
       cpu: 50m
       memory: 64Mi
+  instabilityFactor: "0.3"
 
 frontend:
   replicaCount: 1

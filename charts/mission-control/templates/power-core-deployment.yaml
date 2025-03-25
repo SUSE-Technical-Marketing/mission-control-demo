@@ -25,6 +25,8 @@ spec:
               value: "powerCore"
             - name: OTLP_ENDPOINT
               value: {{ .Values.env.OTLP_ENDPOINT | quote }}
+            - name: INSTABILITY_FACTOR
+              value: {{ .Values.powerCore.instabilityFactor | quote }}
           ports:
             - containerPort: 3000
           readinessProbe:  # ✅ Only send traffic to healthy power cores
