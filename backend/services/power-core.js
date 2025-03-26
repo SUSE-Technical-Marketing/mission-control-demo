@@ -1,6 +1,6 @@
 const express = require('express');
 const cors = require('cors');
-const dns = require('dns');
+const dns = require('node:dns');
 const axios = require('axios');
 const { v4: uuidv4 } = require('uuid');
 
