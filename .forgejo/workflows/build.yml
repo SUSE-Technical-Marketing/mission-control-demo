@@ -13,6 +13,7 @@ env:
   IMAGE_REG: registry.hangar-bay.lab.geeko.me
   BACKEND_REPO: library/mission-control-backend
   FRONTEND_REPO: library/mission-control-frontend
+  CHART_REPO: library/mission-control
 
 jobs:
 
@@ -115,7 +116,7 @@ jobs:
       - name: Set environment variables
         id: set-variables
         run: |
-          echo "REPOSITORY=${{ env.IMAGE_REG }}/$(echo ${{ github.repository }} | tr '[:upper:]' '[:lower:]')" >> "$GITHUB_OUTPUT"
+          echo "REPOSITORY=${{ env.IMAGE_REG }}/${{ env.CHART_REPO }}" >> "$GITHUB_OUTPUT"
           echo "VERSION=$(yq -r .version ./charts/mission-control/Chart.yaml)" >> "$GITHUB_OUTPUT"
       - name: Env variable output
         id: test-variables
@@ -126,8 +127,8 @@ jobs:
         uses: docker/login-action@v3
         with:
           registry: ${{ env.IMAGE_REG}}
-          username: ${{ secrets.REGISTRY_USERNAME }}
-          password: ${{ github.token }}
+          username: admin
+          password: admin
 
       - name: Package and push helm chart
         run: |
