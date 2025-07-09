@@ -10,21 +10,15 @@ on:
   pull_request:
 
 env:
-  IMAGE_REG: ghcr.io
-  BACKEND_REPO: SUSE-Technical-Marketing/mission-control-backend
-  FRONTEND_REPO: SUSE-Technical-Marketing/mission-control-frontend
-
-permissions:
-  packages: write
-  statuses: write
-  checks: write
-  contents: write
+  IMAGE_REG: registry.hangar-bay.lab.geeko.me
+  BACKEND_REPO: library/mission-control-backend
+  FRONTEND_REPO: library/mission-control-frontend
 
 jobs:
 
   build-backend:
     name: 'Build & push backend image'
-    runs-on: ubuntu-latest
+    runs-on: docker
     steps:
       - name: 'Checkout'
         uses: actions/checkout@v4
@@ -39,7 +33,7 @@ jobs:
         uses: docker/login-action@v3
         with:
           registry: ${{ env.IMAGE_REG}}
-          username: ${{ github.actor }}
+          username: ${{ secrets.REGISTRY_USERNAME }}
           password: ${{ github.token }}
       # This step uses [docker/metadata-action](https://github.com/docker/metadata-action#about) to extract tags and labels that will be applied to the specified image. The `id` "meta" allows the output of this step to be referenced in a subsequent step. The `images` value provides the base name for the tags and labels.
       - name: Extract metadata (tags, labels) for Docker
@@ -67,7 +61,7 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
   build-frontend:
     name: 'Build & push frontend image'
-    runs-on: ubuntu-latest
+    runs-on: docker
     steps:
       - name: 'Checkout'
         uses: actions/checkout@v4
@@ -82,7 +76,7 @@ jobs:
         uses: docker/login-action@v3
         with:
           registry: ${{ env.IMAGE_REG}}
-          username: ${{ github.actor }}
+          username: ${{ secrets.REGISTRY_USERNAME }}
           password: ${{ github.token }}
       # This step uses [docker/metadata-action](https://github.com/docker/metadata-action#about) to extract tags and labels that will be applied to the specified image. The `id` "meta" allows the output of this step to be referenced in a subsequent step. The `images` value provides the base name for the tags and labels.
       - name: Extract metadata (tags, labels) for Docker
@@ -110,7 +104,7 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
   publish-helm-chart:
     name: 'Publish Helm Chart'
-    runs-on: ubuntu-latest
+    runs-on: docker
     needs: [build-backend, build-frontend]
     steps:
       - name: Checkout code
@@ -129,7 +123,7 @@ jobs:
         uses: docker/login-action@v3
         with:
           registry: ${{ env.IMAGE_REG}}
-          username: ${{ github.actor }}
+          username: ${{ secrets.REGISTRY_USERNAME }}
           password: ${{ github.token }}
 
       - name: Package and push helm chart
