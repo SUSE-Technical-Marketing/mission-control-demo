@@ -13,7 +13,7 @@ env:
   IMAGE_REG: registry.hangar-bay.lab.geeko.me
   BACKEND_REPO: library/mission-control-backend
   FRONTEND_REPO: library/mission-control-frontend
-  CHART_REPO: library/mission-control
+  CHART_REPO: library
 
 jobs:
 
@@ -134,4 +134,4 @@ jobs:
         run: |
           curl https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
           helm package ./charts/mission-control --version ${{ steps.set-variables.outputs.VERSION }}
-          helm push ./mission-control-${{ steps.set-variables.outputs.VERSION }}.tgz oci://${{ steps.set-variables.outputs.REPOSITORY }}/charts
+          helm push ./mission-control-${{ steps.set-variables.outputs.VERSION }}.tgz oci://${{ steps.set-variables.outputs.REPOSITORY }}
