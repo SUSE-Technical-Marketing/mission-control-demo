@@ -63,6 +63,8 @@ jobs:
   build-frontend:
     name: 'Build & push frontend image'
     runs-on: docker
+    container:
+      image: catthehacker/ubuntu:act-latest
     steps:
       - name: 'Checkout'
         uses: actions/checkout@v4
@@ -104,6 +106,8 @@ jobs:
   publish-helm-chart:
     name: 'Publish Helm Chart'
     runs-on: docker
+    container:
+      image: catthehacker/ubuntu:act-latest
     needs: [build-backend, build-frontend]
     steps:
       - name: Checkout code
