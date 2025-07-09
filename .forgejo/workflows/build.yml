@@ -132,5 +132,6 @@ jobs:
 
       - name: Package and push helm chart
         run: |
+          apt-get update && apt-get install -y helm
           helm package ./charts/mission-control --version ${{ steps.set-variables.outputs.VERSION }}
           helm push ./mission-control-${{ steps.set-variables.outputs.VERSION }}.tgz oci://${{ steps.set-variables.outputs.REPOSITORY }}/charts
