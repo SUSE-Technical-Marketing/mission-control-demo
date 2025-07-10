@@ -1,4 +1,4 @@
-FROM node:24
+FROM registry.suse.com/bci/nodejs:22
 WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm install
