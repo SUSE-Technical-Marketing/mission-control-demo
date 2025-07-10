@@ -18,7 +18,7 @@ spec:
     spec:
       containers:
         - name: life-support
-          image: "{{ include "mission-control.registry" . }}/{{ .Values.lifeSupport.image.repository }}:{{ .Values.lifeSupport.image.tag }}"
+          image: "{{ include "mission-control.registry" .Values.lifeSupport }}/{{ .Values.lifeSupport.image.repository }}:{{ .Values.lifeSupport.image.tag }}"
           imagePullPolicy: {{ default "IfNotPresent" .Values.lifeSupport.image.pullPolicy }}
           env:
             - name: SERVICE
