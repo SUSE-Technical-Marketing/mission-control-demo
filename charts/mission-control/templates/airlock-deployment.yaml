@@ -18,7 +18,7 @@ spec:
     spec:
       containers:
         - name: airlock
-          image: "{{ .Values.airlock.image.registry }}/{{ .Values.airlock.image.repository }}:{{ .Values.airlock.image.tag }}"
+          image: "{{ include "mission-control.registry" . }}/{{ .Values.airlock.image.repository }}:{{ .Values.airlock.image.tag }}"
           imagePullPolicy: {{ default "IfNotPresent" .Values.airlock.image.pullPolicy }}
           env:
             - name: SERVICE

@@ -18,7 +18,7 @@ spec:
     spec:
       containers:
         - name: power-core
-          image: "{{ .Values.powerCore.image.registry }}/{{ .Values.powerCore.image.repository }}:{{ .Values.powerCore.image.tag }}"
+          image: "{{ include "mission-control.registry" . }}/{{ .Values.powerCore.image.repository }}:{{ .Values.powerCore.image.tag }}"
           imagePullPolicy: {{ default "IfNotPresent" .Values.powerCore.image.pullPolicy }}
           env:
             - name: SERVICE

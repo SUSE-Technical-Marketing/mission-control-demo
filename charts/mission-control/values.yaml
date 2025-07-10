@@ -1,3 +1,6 @@
+global:
+  imageRegistry: ""
+
 airlock:
   replicaCount: 1
   image:
@@ -89,5 +92,5 @@ env:
   API_BASE_URL: "https://mission-control.lab.geeko.me"
   REDIS_HOST: "redis-headless.redis.svc.cluster.local"
   REDIS_PORT: "6379"
-  REDIS_PASSWORD: "vxoTHNw8rUt09pyg"
+  REDIS_PASSWORD: ""
 
