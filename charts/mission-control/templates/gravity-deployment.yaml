@@ -18,7 +18,7 @@ spec:
     spec:
       containers:
         - name: gravity
-          image: "{{ include "mission-control.registry" .Values.gravity }}/{{ .Values.gravity.image.repository }}:{{ .Values.gravity.image.tag }}"
+          image: "{{ template "mission-control.registry" list . .Values.gravity }}/{{ .Values.gravity.image.repository }}:{{ .Values.gravity.image.tag }}"
           imagePullPolicy: {{ default "IfNotPresent" .Values.gravity.image.pullPolicy }}
           env:
             - name: SERVICE

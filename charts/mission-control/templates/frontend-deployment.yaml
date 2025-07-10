@@ -18,7 +18,7 @@ spec:
     spec:
       containers:
         - name: frontend
-          image: "{{ include "mission-control.registry" .Values.frontend }}/{{ .Values.frontend.image.repository }}:{{ .Values.frontend.image.tag }}"
+          image: "{{ template "mission-control.registry" list . .Values.frontend }}/{{ .Values.frontend.image.repository }}:{{ .Values.frontend.image.tag }}"
           imagePullPolicy: {{ default "IfNotPresent" .Values.frontend.image.pullPolicy }}
           env:
             - name: API_BASE_URL
