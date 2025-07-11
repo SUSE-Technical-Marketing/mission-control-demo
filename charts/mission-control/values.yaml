@@ -79,7 +79,7 @@ frontend:
 
 ingress:
   enabled: true
-  className: nginx
+  ingressClassName: nginx
   host: mission-control.lab.geeko.me
   annotations:
     cert-manager.io/cluster-issuer: letsencrypt-prod
