@@ -8,7 +8,7 @@ module.exports = () => {
   app.use(express.json());
   const enabled = process.env.ENABLED === 'true';
 
-  const redis = !enabled && new Redis({
+  const redis = enabled && new Redis({
     host: process.env.REDIS_HOST || "localhost",
     port: process.env.REDIS_PORT || 6379,
     password: process.env.REDIS_PASSWORD
