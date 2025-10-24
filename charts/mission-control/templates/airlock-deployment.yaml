@@ -21,7 +21,7 @@ spec:
           image: "{{ template "mission-control.registry" list . .Values.airlock }}/{{ .Values.airlock.image.repository }}:{{ .Values.airlock.image.tag }}"
           imagePullPolicy: {{ default "IfNotPresent" .Values.airlock.image.pullPolicy }}
           env:
-            - name: DISABLED
+            - name: ENABLED
               value: {{ .Values.airlock.enabled | quote }}
             - name: SERVICE
               value: "airlock"
