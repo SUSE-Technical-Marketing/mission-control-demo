@@ -6,8 +6,9 @@ module.exports = () => {
   const app = express();
   app.use(cors());
   app.use(express.json());
+  const disabled = process.env.DISABLED === 'true';
 
-  const redis = new Redis({
+  const redis = !disabled && new Redis({
     host: process.env.REDIS_HOST || "localhost",
     port: process.env.REDIS_PORT || 6379,
     password: process.env.REDIS_PASSWORD
@@ -15,6 +16,7 @@ module.exports = () => {
 
   // Set default airlock status and timestamp if not already set
   async function initializeAirlock() {
+    if (disabled) return;
     const status = await redis.hget("airlock", "status");
     if (!status) {
       await redis.hset("airlock", "status", "closed", "last_change", new Date().toISOString());
@@ -24,6 +26,13 @@ module.exports = () => {
 
   // Get current airlock status with timestamp
   app.get('/api/airlock', async (req, res) => {
+    if (disabled) {
+      return res.json({
+        airlock_status: "disabled",
+        last_change: new Date().toISOString()
+      });
+    }
+
     const airlockData = await redis.hgetall("airlock");
     res.json({
       airlock_status: airlockData.status || "closed",
@@ -37,6 +46,10 @@ module.exports = () => {
     console.info(`Airlock received command: ${command}`);
     if (!["open", "close"].includes(command)) {
       return res.status(400).json({ error: 'Invalid command. Use "open" or "close".' });
+    }
+
+    if (disabled) {
+      return res.status(400).json({ error: 'Airlock is disabled. Command not executed.' });
     }
 
     const timestamp = new Date().toISOString();

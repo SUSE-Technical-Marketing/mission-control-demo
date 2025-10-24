@@ -1,4 +1,3 @@
-{{- if .Values.airlock.enabled }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -22,6 +21,8 @@ spec:
           image: "{{ template "mission-control.registry" list . .Values.airlock }}/{{ .Values.airlock.image.repository }}:{{ .Values.airlock.image.tag }}"
           imagePullPolicy: {{ default "IfNotPresent" .Values.airlock.image.pullPolicy }}
           env:
+            - name: DISABLED
+              value: {{ .Values.airlock.enabled | quote }}
             - name: SERVICE
               value: "airlock"
             - name: OTLP_ENDPOINT
@@ -41,4 +42,3 @@ spec:
             requests:
               cpu: {{ .Values.airlock.resources.requests.cpu }}
               memory: {{ .Values.airlock.resources.requests.memory }}
-{{- end }}
