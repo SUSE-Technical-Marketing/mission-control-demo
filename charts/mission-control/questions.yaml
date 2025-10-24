@@ -1,6 +1,7 @@
 questions:
   - question: "What is the host name for the Mission Control ingress?"
     type: "text"
+    label: "Mission Control Ingress Host"
     variable: "ingress.host"
-    default: "mission-control."
+    default: "mission-control"
     help: "The host name used to access Mission Control via the ingress."
