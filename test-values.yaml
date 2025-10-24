@@ -1,0 +1,24 @@
+global:
+  imageRegistry: registry.hangar-bay.lab.geeko.me
+frontend:
+  image:
+    repository: library/mission-control-frontend
+airlock:
+  image:
+    repository: library/mission-control-backend
+gravity:
+  image:
+    repository: library/mission-control-backend
+lifeSupport:
+  image:
+    repository: library/mission-control-backend
+powerCore:
+  image:
+    repository: library/mission-control-backend
+ingress:
+  enabled: true
+  host: mission-control.ion-drive.lab.geeko.me
+  className: nginx
+  tls:
+    enabled: true
+    secretName: mission-control-tls

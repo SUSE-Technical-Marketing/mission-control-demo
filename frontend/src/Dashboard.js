@@ -52,7 +52,7 @@ const Dashboard = () => {
         </div>
         <PowerCoreStatus />
       </div>
-      <AirlockControl />
+      {/* <AirlockControl /> */}
     </div>
   );
 };

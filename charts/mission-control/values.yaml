@@ -2,6 +2,7 @@ global:
   imageRegistry: ""
 
 airlock:
+  enabled: false
   replicaCount: 1
   image:
     registry: ghcr.io
@@ -80,7 +81,7 @@ frontend:
 ingress:
   enabled: true
   ingressClassName: nginx
-  host: mission-control.lab.geeko.me
+  host: ""
   annotations:
     cert-manager.io/cluster-issuer: letsencrypt-prod
   tls:
@@ -88,8 +89,8 @@ ingress:
     secretName: mission-control-tls
 
 env:
-  OTLP_ENDPOINT: "http://otel-collector.lab.geeko.me:4317"
-  API_BASE_URL: "https://mission-control.lab.geeko.me"
+  OTLP_ENDPOINT: "http://otel-collector"
+  API_BASE_URL: "https://mission-control"
   REDIS_HOST: "redis-headless.redis.svc.cluster.local"
   REDIS_PORT: "6379"
   REDIS_PASSWORD: ""
