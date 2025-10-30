@@ -1,0 +1,186 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Release.Name }}-config
+  labels:
+    app.kubernetes.io/name: {{ .Chart.Name }}
+data:
+  index.html: |
+    <!DOCTYPE html>
+    <html lang="en">
+    <head>
+      <meta charset="UTF-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <title>📡 Deep Space Network</title>
+      <style>
+        body {
+          font-family: Arial, sans-serif;
+          background: radial-gradient(circle, #000428, #002b50);
+          color: white;
+          margin: 0;
+          padding: 0;
+        }
+
+        header {
+          text-align: center;
+          padding: 20px 0;
+        }
+
+        header h1 {
+          font-size: 2.5rem;
+          color: cyan;
+          text-shadow: 0 0 20px cyan;
+        }
+
+        header p {
+          font-size: 1.2rem;
+          color: #ddd;
+          margin: 10px 0 40px; /* Adds spacing below the title */
+        }
+
+        .container {
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          padding-top: 40px;
+          gap: 40px; /* Adds spacing between the Voyager and the live-feed box */
+        }
+
+        .voyager {
+          text-align: center;
+        }
+
+        .voyager img {
+          width: 300px;
+          max-width: 80%;
+          filter: drop-shadow(0 0 10px white);
+          animation: pulse 5s infinite alternate;
+        }
+
+        @keyframes pulse {
+          from {
+            transform: scale(1);
+          }
+          to {
+            transform: scale(1.2);
+          }
+        }
+
+        .live-feed {
+          padding: 15px 20px;
+          border: 1px solid rgba(255, 255, 255, 0.3);
+          background: rgba(255, 255, 255, 0.1);
+          border-radius: 10px;
+          text-align: left;
+          width: 80%;
+          max-width: 800px;
+          font-family: monospace;
+          overflow-y: auto;
+          height: 150px;
+        }
+
+        footer {
+          text-align: center;
+          margin-top: 20px;
+          font-size: 0.9rem;
+          color: #ccc;
+        }
+
+        /* Stars background animation */
+        .stars {
+          position: absolute;
+          width: 100%;
+          height: 100%;
+          background: transparent;
+          z-index: -1;
+        }
+
+        @keyframes star-flicker {
+          0%, 100% { opacity: 0.8; }
+          50% { opacity: 1; }
+        }
+
+        .star {
+          position: absolute;
+          background: white;
+          border-radius: 50%;
+          animation: star-flicker 5s infinite;
+        }
+
+        .star:nth-child(odd) {
+          animation-duration: 7s;
+        }
+
+        .star:nth-child(even) {
+          animation-duration: 10s;
+        }
+      </style>
+    </head>
+    <body>
+      <!-- Header Section -->
+      <div class="stars" id="stars"></div>
+      <header>
+        <h1>📡 Deep Space Communications</h1>
+        <p>Listening to the faint whispers of Voyager 1 & 2 from beyond the Solar System.</p>
+      </header>
+
+      <div class="voyager">
+        <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/6/60/Voyager_spacecraft_model.png/800px-Voyager_spacecraft_model.png" alt="Voyager Satellite">
+      </div>
+      <!-- Main Container -->
+      <div class="container">
+        <div class="live-feed" id="liveFeed">
+          <!-- Live Data Feed -->
+          <p>Initializing connection to Voyager 1...</p>
+        </div>
+      </div>
+
+      <!-- Footer -->
+      <footer>
+        <p>Powered by Deep Space Network · © 2025 Infinite Improbability Ventures</p>
+      </footer>
+
+      <!-- Animated Stars -->
+
+      <script>
+        // Generate a starry background
+        const starsContainer = document.getElementById('stars');
+        const numStars = 150;
+        for (let i = 0; i < numStars; i++) {
+          const star = document.createElement('div');
+          star.classList.add('star');
+          star.style.width = `${Math.random() * 3}px`;
+          star.style.height = star.style.width;
+          star.style.top = `${Math.random() * 100}vh`;
+          star.style.left = `${Math.random() * 100}vw`;
+          starsContainer.appendChild(star);
+        }
+
+        // Simulated live feed
+        const liveFeed = document.getElementById('liveFeed');
+        const messages = [
+          "Receiving signal from Voyager 1...",
+          "Signal strength: -158 dBm",
+          "Decoding telemetry data...",
+          "Current distance: 23,000,000,000 km from Earth",
+          "Image received: Pale Blue Dot",
+          "Switching to Voyager 2...",
+          "Receiving signal from Voyager 2...",
+          "Signal strength: -160 dBm",
+          "Telemetry: Operational",
+          "Current distance: 19,500,000,000 km from Earth",
+          "Image received: Solar System Horizon",
+          "Connection stable. Listening for updates..."
+        ];
+
+        let messageIndex = 0;
+        setInterval(() => {
+            const message = document.createElement('p');
+            message.textContent = messages[messageIndex % messages.length];
+            liveFeed.appendChild(message);
+            liveFeed.scrollTop = liveFeed.scrollHeight; // Auto-scroll
+            messageIndex++;
+        }, Math.random() * (5000 - 2000) + 2000);
+      </script>
+    </body>
+    </html>

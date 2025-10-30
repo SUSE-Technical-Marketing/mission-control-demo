@@ -1,0 +1,24 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ .Release.Name }}-k6-load
+  labels:
+    app.kubernetes.io/name: {{ .Chart.Name }}
+spec:
+  template:
+    metadata:
+      labels:
+        app: {{ .Release.Name }}-k6-load
+    spec:
+      containers:
+      - name: k6
+        image: grafana/k6:latest
+        command: ["k6", "run", "/scripts/load.js"]
+        volumeMounts:
+        - name: load-script
+          mountPath: /scripts
+      restartPolicy: Never
+      volumes:
+      - name: load-script
+        configMap:
+          name: {{ .Release.Name }}-k6-script

@@ -1,0 +1,36 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Release.Name }}
+  labels:
+    app: {{ .Release.Name }}
+    app.kubernetes.io/name: {{ .Chart.Name }}
+spec:
+  replicas: {{ .Values.nginx.replicas }}
+  selector:
+    matchLabels:
+      app: {{ .Release.Name }}
+  template:
+    metadata:
+      labels:
+        app: {{ .Release.Name }}
+        app.kubernetes.io/name: {{ .Chart.Name }}
+    spec:
+      {{- with .Values.global.imagePullSecrets }}
+      imagePullSecrets:
+      {{- range $ps := . }}
+      - name: {{ $ps }}
+      {{- end }}
+      {{- end }}
+      containers:
+      - name: nginx
+        image: {{ .Values.nginx.image }}
+        ports:
+        - containerPort: 80
+        volumeMounts:
+        - name: static-content
+          mountPath: /usr/share/nginx/html
+      volumes:
+      - name: static-content
+        configMap:
+          name: {{ .Release.Name }}-config
