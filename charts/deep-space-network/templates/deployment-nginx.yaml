@@ -21,6 +21,8 @@ spec:
       {{- range $ps := . }}
       - name: {{ $ps }}
       {{- end }}
+      {{- if .not (empty .Values.appco.pullSecret) }}
+      - name: {{ .Values.appco.pullSecret }}
       {{- end }}
       containers:
       - name: nginx
