@@ -1,0 +1,11 @@
+global:
+  imagePullSecrets: []
+:
+# Pull the latest nginx image from Docker Hub
+image: nginx:latest
+replicas: 1
+ingress:
+  className: "nginx"
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+  host: "solar-power.local"

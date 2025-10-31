@@ -1,0 +1,220 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Release.Name }}-content
+  namespace: {{ .Release.Namespace }}
+data:
+  index.html: |
+    <!doctype html>
+    <html lang="en">
+    <head>
+      <meta charset="utf-8" />
+      <meta name="viewport" content="width=device-width, initial-scale=1" />
+      <title>☀️ Space Solar – Power Budget</title>
+      <style>
+        :root{
+          --bg:#070b1a; --panel:#0e1533; --ink:#e7f0ff; --muted:#9fb1d3; --line:#23356b;
+          --a:#7cc7ff; --b:#3aa9ff; --ok:#34d399; --warn:#f59e0b; --err:#ef4444;
+        }
+        *{box-sizing:border-box}
+        html,body{height:100%}
+        body{margin:0;font-family:ui-sans-serif,system-ui,Segoe UI,Roboto;color:var(--ink);
+          background: radial-gradient(1200px 720px at 80% -10%, #18225a 0%, var(--bg) 60%);
+        }
+        header{position:sticky;top:0;z-index:10;padding:14px 16px;background:rgba(10,14,38,.75);backdrop-filter:blur(6px);border-bottom:1px solid var(--line)}
+        h1{margin:0;font-size:18px;letter-spacing:.02em}
+
+        .wrap{max-width:1100px;margin:0 auto;padding:14px;display:grid;gap:14px;grid-template-columns:360px 1fr}
+        .card{background:linear-gradient(180deg,#141a3f 0%, var(--panel) 100%);border:1px solid var(--line);border-radius:14px;padding:14px;box-shadow:0 10px 28px rgba(0,0,0,.4)}
+        .row{display:flex;align-items:center;justify-content:space-between;gap:10px;margin:10px 0}
+        .row input[type=range]{width:58%}
+        .row input[type=range]{accent-color:#76c9ff}
+        .hint{font-size:12px;color:var(--muted)}
+        .badge{font-size:12px;border:1px solid #2b4488;background:#12205b;color:#d6e6ff;padding:2px 8px;border-radius:999px}
+
+        .kpi{display:grid;grid-template-columns:repeat(3, minmax(160px,1fr));gap:12px}
+        .kpi .tile{border:1px solid var(--line);background:#0f1639;border-radius:12px;padding:12px}
+        .kpi h4{margin:0 0 6px;font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+        .val{font-size:30px;font-weight:800}
+        .meter{height:10px;border:1px solid #27408e;border-radius:999px;background:#0a1033;overflow:hidden}
+        .meter>span{display:block;height:100%;background:linear-gradient(90deg,var(--b),var(--a));width:0%}
+
+        .viz{display:grid;grid-template-columns:1fr;gap:10px}
+        .orbit{height:360px;border:1px solid var(--line);border-radius:14px;background:radial-gradient(140px 140px at 20% 50%, #1b2a66 0%, #0b1130 60%)}
+        .legend{display:flex;gap:10px;flex-wrap:wrap}
+        .chip{display:inline-flex;align-items:center;gap:6px;border:1px solid #2a3c75;border-radius:999px;padding:6px 10px}
+        .dot{width:8px;height:8px;border-radius:999px;background:var(--ok)}
+        .dot.warn{background:var(--warn)}
+        .dot.err{background:var(--err)}
+
+        button{appearance:none;border:1px solid #2b3a74;background:#1a2352;color:var(--ink);border-radius:10px;padding:8px 12px;cursor:pointer;font-weight:600}
+
+        @media (max-width: 1000px){ .wrap{grid-template-columns:1fr} .kpi{grid-template-columns:repeat(2,1fr)} }
+      </style>
+    </head>
+    <body>
+      <header>
+        <h1>🛰️ Space Solar — Power Budget Visualizer <span class="badge" id="phaseBadge">Sunlit</span></h1>
+      </header>
+
+      <main class="wrap">
+        <section class="card">
+          <div class="row"><strong>Sun Angle (°)</strong><input id="angle" type="range" min="0" max="90" step="1" value="10"><span id="angleLbl">10°</span></div>
+          <div class="hint">0° = perfect pointing; 90° = edge-on (no power).</div>
+          <div class="row"><strong>Eclipse Fraction</strong><input id="eclipse" type="range" min="0" max="0.7" step="0.01" value="0.36"><span id="eclipseLbl">0.36</span></div>
+          <div class="hint">Fraction of each orbit spent in Earth's shadow.</div>
+          <div class="row"><strong>Degradation (%)</strong><input id="degrade" type="range" min="0" max="30" step="1" value="5"><span id="degradeLbl">5%</span></div>
+          <div class="hint">Panel aging, micrometeoroids, contamination.</div>
+          <div class="row"><button id="reset">Reset</button><button id="toggle">Pause</button></div>
+        </section>
+
+        <section class="viz">
+          <div class="kpi">
+            <div class="tile">
+              <h4>Available Power</h4>
+              <div class="val" id="powerVal">— W</div>
+              <div class="meter"><span id="powerBar"></span></div>
+            </div>
+            <div class="tile">
+              <h4>Sunlit vs Eclipse</h4>
+              <div class="val" id="lightVal">Sunlit</div>
+              <div class="meter"><span id="lightBar"></span></div>
+            </div>
+            <div class="tile">
+              <h4>Incidence (cos θ)</h4>
+              <div class="val" id="incVal">—</div>
+              <div class="meter"><span id="incBar"></span></div>
+            </div>
+          </div>
+
+          <div class="card orbit">
+            <svg id="orbit" viewBox="0 0 800 360" width="100%" height="100%">
+              <!-- Earth (left) -->
+              <defs>
+                <radialGradient id="gEarth" cx="30%" cy="50%" r="70%">
+                  <stop offset="0%" stop-color="#263a9e"/>
+                  <stop offset="70%" stop-color="#0d1544"/>
+                  <stop offset="100%" stop-color="#0a1030"/>
+                </radialGradient>
+              </defs>
+              <circle cx="160" cy="180" r="120" fill="url(#gEarth)" stroke="#20326a"/>
+              <!-- Orbit path -->
+              <ellipse cx="400" cy="180" rx="300" ry="120" fill="none" stroke="#2b3f86" stroke-dasharray="6 6"/>
+              <!-- Sun direction (right) -->
+              <line x1="780" y1="180" x2="640" y2="180" stroke="#5bc3ff" stroke-width="2" marker-end="url(#arrow)"/>
+              <defs>
+                <marker id="arrow" markerWidth="6" markerHeight="6" refX="5" refY="3" orient="auto">
+                  <polygon points="0 0, 6 3, 0 6" fill="#7cc7ff" />
+                </marker>
+              </defs>
+              <!-- Spacecraft -->
+              <g id="craft" transform="translate(100,100)">
+                <rect x="-16" y="-10" width="32" height="20" rx="4" fill="#dfe8ff" stroke="#111a3f"/>
+                <circle cx="18" cy="0" r="6" fill="none" stroke="#111a3f"/>
+              </g>
+              <!-- Eclipse arc overlay (dark segment on ellipse) drawn in JS -->
+              <path id="eclipseArc" d="" stroke="#0b0f29" stroke-width="6" opacity="0.8"/>
+            </svg>
+            <div class="legend" style="padding:8px 10px">
+              <span class="chip"><span class="dot" id="lightDot"></span>Sunlit</span>
+              <span class="chip"><span class="dot warn"></span>Eclipse Segment</span>
+              <span class="chip">Phase: <b id="phaseLbl">0.00</b></span>
+            </div>
+          </div>
+        </section>
+      </main>
+
+      <script>
+        const $ = s => document.querySelector(s);
+        const SOLAR = 1361;           // W/m² in space
+        const AREA = 50;              // m²
+        const BASE_EFF = 0.28;        // 28%
+        let running = true;
+        const state = { phase: 0, speed: 0.0025 };// phase 0..1 per tick
+
+        // DOM refs
+        const angle = $('#angle'), eclipse = $('#eclipse'), degrade = $('#degrade');
+        const angleLbl = $('#angleLbl'), eclipseLbl = $('#eclipseLbl'), degradeLbl = $('#degradeLbl');
+        const powerVal = $('#powerVal'), powerBar = $('#powerBar');
+        const lightVal = $('#lightVal'), lightBar = $('#lightBar');
+        const incVal = $('#incVal'), incBar = $('#incBar');
+        const phaseLbl = $('#phaseLbl'), phaseBadge = $('#phaseBadge'), lightDot = $('#lightDot');
+        const craft = $('#craft'), eclipsor = $('#eclipseArc');
+
+        function incidenceCos(deg){ return Math.max(0, Math.cos(deg * Math.PI/180)); }
+
+        function drawEclipseArc(){
+          // Draw dark arc around the portion of ellipse that is in shadow, centered opposite the Sun.
+          const cx=400, cy=180, rx=300, ry=120;
+          const frac = Number(eclipse.value); const half = frac * Math.PI; // radians
+          const start = Math.PI/2 - half;  // top going clockwise on the back side
+          const end   = Math.PI/2 + half;
+          // Build a polyline along the ellipse between start..end
+          const pts = [];
+          const steps = 80;
+          for(let i=0;i<=steps;i++){
+            const t = start + (i/steps)*(end-start);
+            const x = cx + rx * Math.cos(t);
+            const y = cy + ry * Math.sin(t);
+            pts.push((i===0?'M':'L')+x.toFixed(1)+','+y.toFixed(1));
+          }
+          eclipsor.setAttribute('d', pts.join(' '));
+        }
+
+        function updateTelemetry(){
+          const theta = Number(angle.value);
+          const frac = Number(eclipse.value);
+          const deg = Number(degrade.value)/100;
+          const inc = incidenceCos(theta);
+          const inEclipse = Math.abs(state.phase - 0.5) <= frac/2;
+
+          const eff = BASE_EFF * (1 - deg);
+          const irradiance = inEclipse ? 0 : SOLAR;
+          const power = AREA * eff * irradiance * inc;
+
+          // KPIs
+          powerVal.textContent = Math.round(power) + ' W';
+          const maxP = AREA * BASE_EFF * SOLAR; // best case 0° & no degradation
+          powerBar.style.width = Math.min(100, (power/maxP)*100) + '%';
+
+          lightVal.textContent = inEclipse ? 'Eclipse' : 'Sunlit';
+          lightBar.style.width = inEclipse ? '0%' : '100%';
+          lightBar.style.background = inEclipse ? 'linear-gradient(90deg,#1b2250,#24306e)' : '';
+
+          incVal.textContent = inc.toFixed(3);
+          incBar.style.width = (inc*100) + '%';
+
+          phaseLbl.textContent = state.phase.toFixed(2);
+          phaseBadge.textContent = inEclipse ? 'Eclipse' : 'Sunlit';
+          phaseBadge.style.color = inEclipse ? 'var(--warn)' : 'var(--ok)';
+          lightDot.style.background = inEclipse ? 'var(--warn)' : 'var(--ok)';
+
+          // Move craft along ellipse according to phase (0..1, clockwise)
+          const t = state.phase * Math.PI*2; // 0 at right (sun side)
+          const cx=400, cy=180, rx=300, ry=120;
+          const x = cx + rx * Math.cos(t);
+          const y = cy + ry * Math.sin(t);
+          craft.setAttribute('transform', `translate(${x},${y})`);
+        }
+
+        function tick(){
+          if(!running) return;
+          state.phase += state.speed;
+          if(state.phase>1) state.phase -= 1;
+          updateTelemetry();
+          requestAnimationFrame(tick);
+        }
+
+        // UI bindings
+        angle.oninput = () => { angleLbl.textContent = angle.value + '°'; updateTelemetry(); };
+        eclipse.oninput = () => { eclipseLbl.textContent = Number(eclipse.value).toFixed(2); drawEclipseArc(); updateTelemetry(); };
+        degrade.oninput = () => { degradeLbl.textContent = degrade.value + '%'; updateTelemetry(); };
+        $('#reset').onclick = () => { angle.value=10; eclipse.value=0.36; degrade.value=5; angle.oninput(); eclipse.oninput(); degrade.oninput(); };
+        $('#toggle').onclick = () => { running = !running; if(running) requestAnimationFrame(tick); };
+
+        // boot
+        drawEclipseArc(); angle.oninput(); eclipse.oninput(); degrade.oninput();
+        requestAnimationFrame(tick);
+      </script>
+    </body>
+    </html>
