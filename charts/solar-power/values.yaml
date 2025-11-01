@@ -1,6 +1,6 @@
 global:
   imagePullSecrets: []
-:
+
 # Pull the latest nginx image from Docker Hub
 image: nginx:latest
 replicas: 1
