@@ -1,0 +1,9 @@
+apiVersion: v2
+name: sal-9001
+description: A Helm chart for the SUSE Austronaut Liaison 9001
+type: application
+version: 0.1.0
+appVersion: "1.0.0"
+keywords:
+  - ai
+  - helm

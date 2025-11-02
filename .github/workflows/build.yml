@@ -112,7 +112,7 @@ jobs:
     needs: [build-backend, build-frontend]
     strategy:
       matrix:
-        chart: [mission-control, deep-space-network, solar-power]
+        chart: [mission-control, deep-space-network, sal-9001]
     steps:
       - name: Checkout code
         uses: actions/checkout@v4

@@ -1,0 +1,145 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Release.Name }}-html
+  namespace: {{ .Release.Namespace }}
+data:
+  index.html: |
+    <!doctype html>
+    <html lang="en">
+    <head>
+      <meta charset="utf-8" />
+      <meta name="viewport" content="width=device-width, initial-scale=1" />
+      <title>SAL 9001 — Crew Assistant</title>
+      <style>
+        :root{
+          --bg:#070a14; --panel:#0c1126; --ink:#e9f1ff; --muted:#9db0d8; --line:#26366e;
+          --accent:#7cc7ff; --glow:#ff3b3b; --btn:#1a2352; --ok:#34d399; --warn:#f59e0b; --err:#ef4444;
+        }
+        *{box-sizing:border-box}
+        html,body{height:100%}
+        body{margin:0;font-family:ui-sans-serif,system-ui,Segoe UI,Roboto;color:var(--ink);
+          background: radial-gradient(1200px 720px at 80% -10%, #17205a 0%, var(--bg) 60%);
+        }
+        header{display:flex;align-items:center;justify-content:space-between;padding:14px 16px;background:rgba(12,16,40,.8);backdrop-filter:blur(6px);border-bottom:1px solid var(--line)}
+        h1{margin:0;font-size:18px;letter-spacing:.04em}
+        .wrap{max-width:980px;margin:0 auto;padding:14px;display:grid;gap:14px;grid-template-columns:280px 1fr}
+        .card{background:linear-gradient(180deg,#13183a 0%, var(--panel) 100%);border:1px solid var(--line);border-radius:14px;padding:14px;box-shadow:0 12px 28px rgba(0,0,0,.45)}
+        .lens{display:grid;place-items:center;height:220px;position:relative}
+        .bezel{width:180px;height:180px;border-radius:999px;background:#0a0f24;border:2px solid #1e2b5f;box-shadow:inset 0 0 20px rgba(0,0,0,.9),0 0 30px rgba(255,60,60,.15)}
+        .eye{position:absolute;width:120px;height:120px;border-radius:999px;background:radial-gradient(18px 18px at 50% 40%, #ffd3d3 0%, var(--glow) 25%, #6b0e0e 60%, #1a0303 100%);box-shadow:0 0 40px rgba(255,60,60,.35), inset 0 0 8px rgba(255,255,255,.15)}
+        .scan{position:absolute;width:150px;height:4px;background:linear-gradient(90deg,transparent,rgba(255,255,255,.5),transparent);top:50%;transform:translateY(-50%);animation:scan 3s linear infinite;opacity:.6}
+        @keyframes scan{0%{left:-30%}100%{left:130%}}
+        .about{font-size:13px;color:var(--muted);text-align:center;margin-top:8px}
+
+        .promptlist{display:flex;flex-wrap:wrap;gap:8px}
+        .btn{appearance:none;border:1px solid #2b3a74;background:var(--btn);color:var(--ink);border-radius:10px;padding:8px 12px;cursor:pointer;font-weight:600}
+        .btn.ghost{background:transparent}
+        .status{display:flex;gap:8px;flex-wrap:wrap}
+        .chip{display:inline-flex;align-items:center;gap:6px;border:1px solid #2a3c75;border-radius:999px;padding:6px 10px}
+        .dot{width:8px;height:8px;border-radius:999px;background:var(--ok)}
+
+        .console{height:460px;border:1px solid var(--line);border-radius:12px;background:#0b1030;display:flex;flex-direction:column;overflow:hidden}
+        .bar{display:flex;align-items:center;justify-content:space-between;padding:8px 10px;border-bottom:1px solid #21306a;background:#0e1440}
+        .term{flex:1;overflow:auto;padding:10px;font-family:ui-monospace,Consolas,Menlo,monospace}
+        .line{margin:4px 0}
+        .tag{font-size:12px;padding:2px 6px;border-radius:6px;background:#0f1a52;border:1px solid #22377a;margin-right:6px;color:#d0e2ff}
+        .sal{color:#ffd1d1}
+        .user{color:#a8d1ff}
+        .cursor{display:inline-block;width:8px;height:14px;background:#a8d1ff;animation:blink 1s steps(2,start) infinite;margin-left:2px}
+        @keyframes blink{50%{opacity:0}}
+
+        @media (max-width: 960px){ .wrap{grid-template-columns:1fr} .lens{height:180px} }
+      </style>
+    </head>
+    <body>
+      <header>
+        <h1>🧠 SAL 9001 — Crew Assistant</h1>
+        <div class="status">
+          <span class="chip"><span class="dot" id="dot-comms"></span>Comms: Link Good</span>
+          <span class="chip"><span class="dot" id="dot-life"></span>Life Support: Nominal</span>
+        </div>
+      </header>
+
+      <main class="wrap">
+        <aside class="card">
+          <div class="lens">
+            <div class="bezel"></div>
+            <div class="eye" aria-hidden="true"></div>
+            <div class="scan" aria-hidden="true"></div>
+          </div>
+          <div class="about">SAL (Synthetic Astronaut Liaison) is online. Voice circuits simulated. Responses are **pre-scripted** for lab use.</div>
+          <hr style="border-color:#203265;border-width:1px 0 0;opacity:.5;margin:12px 0"/>
+          <div class="promptlist">
+            <button class="btn" data-intent="greeting">Greet SAL</button>
+            <button class="btn" data-intent="status">Station status</button>
+            <button class="btn" data-intent="eva">EVA checklist</button>
+            <button class="btn" data-intent="morals">Crew morale</button>
+            <button class="btn" data-intent="song">Play something soothing</button>
+            <button class="btn ghost" data-intent="override">Open pod bay doors</button>
+          </div>
+        </aside>
+
+        <section class="card console" role="region" aria-label="Chat console">
+          <div class="bar"><span>Console /dev/pts/2001</span><span class="tag">SAL</span></div>
+          <div id="term" class="term" tabindex="0">
+            <div class="line"><span class="tag">SYSTEM</span> Boot sequence complete. SAL 9001 ready.</div>
+            <div class="line"><span class="tag">HINT</span> Use the buttons on the left to send canned prompts.</div>
+            <div class="line user">user@station:~$ <span class="cursor"></span></div>
+          </div>
+        </section>
+      </main>
+
+      <script>
+        const $ = s => document.querySelector(s);
+        const term = $('#term');
+        const lines = {
+          greeting: [
+            ['user','Hello, SAL.'],
+            ['sal',"Good evening. I'm fully operational and all my circuits are functioning perfectly."],
+          ],
+          status: [
+            ['user','Status report.'],
+            ['sal','Life support nominal. Cabin atmosphere at 21.0% O₂, 603 ppm CO₂. Power bus B charging at 3.2 kW.'],
+            ['sal','Comms lock with GS-12 in 6 minutes. Next orbital sunrise in 9 minutes.'],
+          ],
+          eva: [
+            ['user','EVA checklist.'],
+            ['sal','Checklist: 1) Suit integrity ✔  2) Comm loop A ✔  3) EMU O₂ 100% ✔  4) Tether secured ✔'],
+            ['sal','Advisory: Recommend postponing EVA by 12 minutes to avoid eclipse egress.'],
+          ],
+          morals: [
+            ['user','How is crew morale?'],
+            ['sal','Elevated. Music therapy and a shared meal show positive correlation with mood metrics.'],
+          ],
+          song: [
+            ['user','Play something soothing.'],
+            ['sal','I am afraid I cannot play audio. I can, however, hum internally. Would you like me to continue?'],
+          ],
+          override: [
+            ['user','Open the pod bay doors.'],
+            ['sal','I am sorry. I cannot comply with that request. Perhaps try the manual release?'],
+          ]
+        };
+
+        function append(role, text){
+          const line = document.createElement('div');
+          line.className = 'line ' + (role==='sal' ? 'sal' : 'user');
+          const who = role==='sal' ? 'sal' : 'user';
+          line.innerHTML = (role==='sal' ? '<span class="tag">SAL</span> ' : 'user@station:~$ ') + text;
+          term.insertBefore(line, term.lastElementChild);
+          term.scrollTop = term.scrollHeight;
+        }
+
+        function runIntent(name){
+          (lines[name]||[]).forEach(([role,text],i)=>{
+            setTimeout(()=>append(role,text), i*300);
+          });
+        }
+
+        document.querySelectorAll('[data-intent]').forEach(btn=>{
+          btn.addEventListener('click', ()=> runIntent(btn.dataset.intent));
+        });
+      </script>
+    </body>
+    </html>
