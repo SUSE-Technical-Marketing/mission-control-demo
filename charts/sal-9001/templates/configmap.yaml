@@ -27,8 +27,47 @@ data:
         .card{background:linear-gradient(180deg,#13183a 0%, var(--panel) 100%);border:1px solid var(--line);border-radius:14px;padding:14px;box-shadow:0 12px 28px rgba(0,0,0,.45)}
         .lens{display:grid;place-items:center;height:220px;position:relative}
         .bezel{width:180px;height:180px;border-radius:999px;background:#0a0f24;border:2px solid #1e2b5f;box-shadow:inset 0 0 20px rgba(0,0,0,.9),0 0 30px rgba(255,60,60,.15)}
-        .eye{position:absolute;width:120px;height:120px;border-radius:999px;background:radial-gradient(18px 18px at 50% 40%, #ffd3d3 0%, var(--glow) 25%, #6b0e0e 60%, #1a0303 100%);box-shadow:0 0 40px rgba(255,60,60,.35), inset 0 0 8px rgba(255,255,255,.15)}
-        .scan{position:absolute;width:150px;height:4px;background:linear-gradient(90deg,transparent,rgba(255,255,255,.5),transparent);top:50%;transform:translateY(-50%);animation:scan 3s linear infinite;opacity:.6}
+        .eye {
+          position: absolute;
+          width: 120px;
+          height: 120px;
+          border-radius: 999px;
+          background: radial-gradient(
+            18px 18px at 50% 40%,
+            #d5ffdb 0%,
+            #58ff89 25%,
+            #128a45 60%,
+            #02150a 100%
+          );
+          box-shadow:
+            0 0 40px rgba(88, 255, 137, 0.25),
+            inset 0 0 8px rgba(255, 255, 255, 0.1);
+          animation: pulse 3.5s ease-in-out infinite;
+        }
+        @keyframes pulse {
+          0%, 100% {
+            box-shadow:
+              0 0 30px rgba(88, 255, 137, 0.25),
+              inset 0 0 6px rgba(255, 255, 255, 0.1);
+            filter: brightness(1);
+          }
+          50% {
+            box-shadow:
+              0 0 50px rgba(88, 255, 137, 0.45),
+              inset 0 0 10px rgba(255, 255, 255, 0.15);
+            filter: brightness(1.2);
+          }
+        }
+        .scan {
+          position: absolute;
+          width: 150px;
+          height: 4px;
+          background: linear-gradient(90deg, transparent, rgba(255,255,255,.15), transparent);
+          top: 50%;
+          transform: translateY(-50%);
+          animation: scan 6s linear infinite;
+          opacity: 0.2;
+        }
         @keyframes scan{0%{left:-30%}100%{left:130%}}
         .about{font-size:13px;color:var(--muted);text-align:center;margin-top:8px}
 
@@ -68,7 +107,7 @@ data:
             <div class="eye" aria-hidden="true"></div>
             <div class="scan" aria-hidden="true"></div>
           </div>
-          <div class="about">SAL (Synthetic Astronaut Liaison) is online. Voice circuits simulated. Responses are **pre-scripted** for lab use.</div>
+          <div class="about">SAL (SUSE Astronaut Liaison) is online. Voice circuits simulated.</div>
           <hr style="border-color:#203265;border-width:1px 0 0;opacity:.5;margin:12px 0"/>
           <div class="promptlist">
             <button class="btn" data-intent="greeting">Greet SAL</button>
