@@ -16,14 +16,16 @@ spec:
       labels:
         app: {{ .Release.Name }}
     spec:
-      {{- with .Values.global.imagePullSecrets }}
+      {{- if or (.Values.global.imagePullSecrets) (and (not (empty .Values.appco)) (not (empty .Values.appco.pullSecret))) }}
       imagePullSecrets:
+      {{- with .Values.global.imagePullSecrets }}
       {{- range $ps := . }}
       - name: {{ $ps }}
       {{- end }}
       {{- end }}
-      {{- if not (empty .Values.appco.pullSecret) }}
+      {{- if and (not (empty .Values.appco)) (not (empty .Values.appco.pullSecret)) }}
       - name: {{ .Values.appco.pullSecret }}
+      {{- end }}
       {{- end }}
       containers:
       - name: nginx
