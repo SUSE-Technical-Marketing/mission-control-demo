@@ -5,11 +5,12 @@ nginx:
   image: nginx:latest
   replicas: 1
   ingress:
-    className: "nginx"
+    className: "traefik"
     annotations:
       cert-manager.io/cluster-issuer: letsencrypt-prod
     host: "deep-space-network.local"
-
+    tls:
+      secretName: wildcard-tls
 k6:
   loadTest:
     duration: "60m"

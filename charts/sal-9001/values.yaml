@@ -5,7 +5,9 @@ global:
 image: nginx:latest
 replicas: 1
 ingress:
-  className: "nginx"
+  className: "traefik"
   annotations:
     cert-manager.io/cluster-issuer: letsencrypt-prod
   host: "sal-9001.local"
+  tls:
+    secretName: wildcard-tls
