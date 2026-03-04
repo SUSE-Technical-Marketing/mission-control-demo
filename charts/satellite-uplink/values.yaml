@@ -1,0 +1,16 @@
+global:
+  imagePullSecrets: []
+# Pull the latest nginx image from Docker Hub
+image: nginx:latest
+replicas: 1
+ingress:
+  className: "traefik"
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+  host: "satellite-uplink.local"
+  tls:
+    secretName: wildcard-tls
+k6:
+  loadTest:
+    duration: "60m"
+    vus: 10

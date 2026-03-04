@@ -1,0 +1,13 @@
+apiVersion: v2
+name: satellite-uplink
+description: A Helm chart for the Satellite Uplink application
+type: application
+version: 0.1.0
+appVersion: "1.0.0"
+maintainers:
+  - name: Geeko
+    email: geeko@example.com
+keywords:
+  - satellite
+  - uplink
+  - helm
