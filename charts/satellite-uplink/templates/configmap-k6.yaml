@@ -15,6 +15,6 @@ data:
     };
 
     export default function () {
-      http.get('http://{{ .Values.nginx.ingress.host }}');
+      http.get('http://{{ .Values.ingress.host }}');
       sleep(1);
     }
