@@ -26,6 +26,17 @@ spec:
       annotations:
         checksum/config: {{ include (print $.Template.BasePath "/ui-configmap.yaml") . | sha256sum }}
     spec:
+      {{- if or (.Values.global.imagePullSecrets) (and (not (empty .Values.appco)) (not (empty .Values.appco.pullSecret))) }}
+      imagePullSecrets:
+      {{- with .Values.global.imagePullSecrets }}
+      {{- range $ps := . }}
+      - name: {{ $ps }}
+      {{- end }}
+      {{- end }}
+      {{- if and (not (empty .Values.appco)) (not (empty .Values.appco.pullSecret)) }}
+      - name: {{ .Values.appco.pullSecret }}
+      {{- end }}
+      {{- end }}
       containers:
         - name: {{ .Release.Name }}-ui
           image: {{ .Values.ui.image }}
