@@ -1,0 +1,51 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Release.Name }}-api-code
+  labels:
+    app.kubernetes.io/name: {{ .Chart.Name }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/component: api
+    app.kubernetes.io/part-of: {{ .Chart.Name }}
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+data:
+  server.js: |
+    const http = require('http');
+
+    const server = http.createServer((req, res) => {
+      res.setHeader('Access-Control-Allow-Origin', '*');
+      res.setHeader('Content-Type', 'application/json');
+
+      if (req.url === '/healthz') {
+        res.writeHead(200);
+        return res.end(JSON.stringify({ ok: true }));
+      }
+
+      if (req.url === '/api/image-status') {
+        const expected = (process.env.EXPECTED_IMAGE || '').trim();
+        const actual   = (process.env.ACTUAL_IMAGE   || '').trim();
+
+        if (!expected || !actual) {
+          res.writeHead(500);
+          return res.end(JSON.stringify({
+            patched: false,
+            error: 'EXPECTED_IMAGE or ACTUAL_IMAGE environment variable not set',
+            expected,
+            actual,
+          }));
+        }
+
+        res.writeHead(200);
+        return res.end(JSON.stringify({
+          patched: actual === expected,
+          expected,
+          actual,
+        }));
+      }
+
+      res.writeHead(404);
+      res.end(JSON.stringify({ error: 'Not found' }));
+    });
+
+    const port = process.env.PORT || 3000;
+    server.listen(port, () => console.log(`ARIA API listening on :${port}`));

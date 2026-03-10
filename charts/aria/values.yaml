@@ -1,0 +1,67 @@
+# ── ARIA Helm Values ──────────────────────────────────────────────────────────
+#
+# No custom images required. The app runs on stock node:20-alpine and
+# nginx:alpine from Docker Hub. All application code lives in ConfigMaps.
+#
+# The only values you need to change per exercise are:
+#   api.expectedImage  — the correct/secure image reference (the "answer")
+#   api.actualImage    — what is currently running (start with the vulnerable one)
+#
+# When actualImage == expectedImage, ARIA enters her "secure" state.
+#
+# Exercise workflow:
+#   1. helm install aria ./helm/aria               <- unpatched state
+#   2. Learner inspects ARIA, identifies the issue
+#   3. helm upgrade aria ./helm/aria \
+#        --set api.actualImage="myregistry.io/myapp:secure"
+#   4. ARIA detects the change within 10 seconds and announces success
+# ─────────────────────────────────────────────────────────────────────────────
+
+global:
+  imagePullSecrets: []
+
+api:
+  # The image learners are expected to deploy (the "correct" answer)
+  expectedImage: "dp.apps.rancher.io/containers/nginx"
+
+  service:
+    type: ClusterIP
+    port: 3000
+
+  image:
+    repository: node
+    tag: "20-alpine"
+
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      cpu: 200m
+      memory: 128Mi
+
+ui:
+  image:
+    repository: nginx
+    tag: "alpine"
+  service:
+    type: ClusterIP
+    port: 80
+
+  exposeLoadBalancer: false
+
+  resources:
+    requests:
+      cpu: 10m
+      memory: 16Mi
+    limits:
+      cpu: 100m
+      memory: 32Mi
+
+ingress:
+  enabled: false
+  className: nginx
+  host: aria.example.com
+  tls: false
+
+replicaCount: 1

@@ -115,7 +115,7 @@ jobs:
     if: startsWith(github.ref, 'refs/tags/v')
     strategy:
       matrix:
-        chart: [mission-control, deep-space-network, sal-9001, satellite-uplink]
+        chart: [mission-control, deep-space-network, sal-9001, satellite-uplink, aria]
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
