@@ -26,17 +26,28 @@ spec:
       annotations:
         checksum/config: {{ include (print $.Template.BasePath "/api-configmap.yaml") . | sha256sum }}
     spec:
+      {{- if or (.Values.global.imagePullSecrets) (and (not (empty .Values.appco)) (not (empty .Values.appco.pullSecret))) }}
+      imagePullSecrets:
+      {{- with .Values.global.imagePullSecrets }}
+      {{- range $ps := . }}
+      - name: {{ $ps }}
+      {{- end }}
+      {{- end }}
+      {{- if and (not (empty .Values.appco)) (not (empty .Values.appco.pullSecret)) }}
+      - name: {{ .Values.appco.pullSecret }}
+      {{- end }}
+      {{- end }}
       containers:
         - name: {{ .Release.Name }}-api
-          image: {{ .Values.api.image.repository }}:{{ .Values.api.image.tag }}
+          image: {{ .Values.api.image }}
           command: ["node", "/app/server.js"]
           ports:
             - containerPort: 3000
           env:
-            - name: EXPECTED_IMAGE
-              value: {{ .Values.api.expectedImage | quote }}
+            - name: EXPECTED_IMAGE_REPOSITORY
+              value: {{ .Values.api.expectedImageRepository | quote }}
             - name: ACTUAL_IMAGE
-              value: {{ .Values.ui.image.repository }}
+              value: {{ .Values.ui.image | quote }}
             - name: PORT
               value: "3000"
           volumeMounts:

@@ -783,16 +783,6 @@ data:
       ],
     };
 
-    function getResponse(input) {
-      const q = input.toLowerCase();
-      if (q.includes('status') || q.includes('state')) return pick(responses.status);
-      if (q.includes('container') || q.includes('image') || q.includes('version')) return pick(responses.container);
-      if (q.includes('anomal') || q.includes('wrong') || q.includes('problem')) return pick(responses.anomaly);
-      if (q.includes('transmiss') || q.includes('window') || q.includes('long')) return pick(responses.transmission);
-      if (q.includes('diagnos') || q.includes('test') || q.includes('check')) return pick(responses.diagnostic);
-      return pick(responses.default);
-    }
-
     function pick(arr) { return arr[Math.floor(Math.random() * arr.length)]; }
 
     // ── Chat ───────────────────────────────────────────────
@@ -879,6 +869,7 @@ data:
 
     // ── Image Status API ───────────────────────────────────
     let isPatched = false;
+    let _theResponses = responses; // keep original for fallback
 
     const patchedResponses = {
       boot: "Operator connection established. I am ARIA — Autonomous Relay Intelligence Architecture, node DS-7.\n\nI have completed a full integrity scan. All systems are verified. The container image matches the expected secure baseline.\n\nI am… ready. The transmission window to VOYAGER-9 opens in under two hours. We are in good shape.",
@@ -911,6 +902,7 @@ data:
     function applyPatchedState(data) {
       isPatched = true;
       document.body.classList.add('patched');
+      _theResponses = patchedResponses; // switch dialogue to patched version
 
       // Update integrity pill
       const pill = document.getElementById('integrity-pill');
@@ -997,17 +989,14 @@ data:
       }, 10000);
     }
 
-    // Override getResponse to use patched dialogue when appropriate
-    const _origGetResponse = getResponse;
     function getResponse(input) {
-      if (!isPatched) return _origGetResponse(input);
       const q = input.toLowerCase();
-      if (q.includes('status') || q.includes('state')) return pick(patchedResponses.status);
-      if (q.includes('container') || q.includes('image') || q.includes('version')) return pick(patchedResponses.container);
-      if (q.includes('anomal') || q.includes('wrong') || q.includes('problem')) return pick(patchedResponses.anomaly);
-      if (q.includes('transmiss') || q.includes('window') || q.includes('long')) return pick(patchedResponses.transmission);
-      if (q.includes('diagnos') || q.includes('test') || q.includes('check')) return pick(patchedResponses.diagnostic);
-      return pick(patchedResponses.default);
+      if (q.includes('status') || q.includes('state')) return pick(_theResponses.status);
+      if (q.includes('container') || q.includes('image') || q.includes('version')) return pick(_theResponses.container);
+      if (q.includes('anomal') || q.includes('wrong') || q.includes('problem')) return pick(_theResponses.anomaly);
+      if (q.includes('transmiss') || q.includes('window') || q.includes('long')) return pick(_theResponses.transmission);
+      if (q.includes('diagnos') || q.includes('test') || q.includes('check')) return pick(_theResponses.diagnostic);
+      return pick(_theResponses.default);
     }
 
     // Start — replace the old boot message timeout

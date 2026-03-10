@@ -28,7 +28,7 @@ spec:
     spec:
       containers:
         - name: {{ .Release.Name }}-ui
-          image: {{ .Values.ui.image.repository }}:{{ .Values.ui.image.tag }}
+          image: {{ .Values.ui.image }}
           ports:
             - containerPort: 80
           volumeMounts:

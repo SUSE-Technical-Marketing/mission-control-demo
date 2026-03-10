@@ -22,22 +22,25 @@ data:
       }
 
       if (req.url === '/api/image-status') {
-        const expected = (process.env.EXPECTED_IMAGE || '').trim();
+        const expected = (process.env.EXPECTED_IMAGE_REPOSITORY || '').trim();
         const actual   = (process.env.ACTUAL_IMAGE   || '').trim();
 
         if (!expected || !actual) {
           res.writeHead(500);
           return res.end(JSON.stringify({
             patched: false,
-            error: 'EXPECTED_IMAGE or ACTUAL_IMAGE environment variable not set',
+            error: 'EXPECTED_IMAGE_REPOSITORY or ACTUAL_IMAGE environment variable not set',
             expected,
             actual,
           }));
         }
 
+        // Check if the actual image comes from the expected image repository
+        const patched = actual.startsWith(expected);
+
         res.writeHead(200);
         return res.end(JSON.stringify({
-          patched: actual === expected,
+          patched,
           expected,
           actual,
         }));

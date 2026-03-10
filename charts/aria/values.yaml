@@ -20,17 +20,18 @@
 global:
   imagePullSecrets: []
 
+appco:
+  pullSecret: ""
+
 api:
   # The image learners are expected to deploy (the "correct" answer)
-  expectedImage: "dp.apps.rancher.io/containers/nginx"
+  expectedImageRepository: "dp.apps.rancher.io/containers/nginx"
 
   service:
     type: ClusterIP
     port: 3000
 
-  image:
-    repository: node
-    tag: "20-alpine"
+  image: node:latest
 
   resources:
     requests:
@@ -41,9 +42,7 @@ api:
       memory: 128Mi
 
 ui:
-  image:
-    repository: nginx
-    tag: "alpine"
+  image: nginx:latest
   service:
     type: ClusterIP
     port: 80
@@ -59,9 +58,11 @@ ui:
       memory: 32Mi
 
 ingress:
-  enabled: false
-  className: nginx
+  enabled: true
+  className: traefik
   host: aria.example.com
-  tls: false
+  tls:
+    enabled: true
+    secretName: wildcard-tls
 
 replicaCount: 1
