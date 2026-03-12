@@ -1,0 +1,207 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Release.Name }}-orbit-engine-code
+  labels:
+    app.kubernetes.io/name: {{ .Chart.Name }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/component: orbit-engine
+    app.kubernetes.io/part-of: {{ .Chart.Name }}
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+data:
+  server.js: |
+    /**
+     * orbit-engine
+     *
+     * Computes satellite positions and ground tracks using a correct circular
+     * orbit model with IAU 1982 GMST for ECI→ECEF conversion.
+     *
+     * Pass schedule uses a round-robin time-slot scheme so there is always
+     * one satellite active — suitable for demo environments where waiting
+     * 90 minutes between real passes is impractical.
+     */
+    'use strict';
+
+    const http = require('http');
+
+    const RE  = 6371;
+    const DEG = Math.PI / 180;
+
+    function log(level, msg, fields = {}) {
+      console.log(JSON.stringify({ ts: new Date().toISOString(), level, svc: 'orbit-engine', msg, ...fields }));
+    }
+
+    const SATELLITES = [
+      { id: 'HELIX-7',  inclination: 51.6, altitude: 550, period: 95.6, raan: 0   },
+      { id: 'CYGNUS-3', inclination: 97.8, altitude: 520, period: 94.9, raan: 90  },
+      { id: 'ORION-12', inclination: 45.0, altitude: 620, period: 97.1, raan: 180 },
+      { id: 'VEGA-5',   inclination: 53.0, altitude: 480, period: 94.2, raan: 270 },
+    ];
+
+    const STATION = { lat: 50.00, lon: 5.14, name: 'DS-7', minElevation: 5 };
+
+    // ── Pass schedule config ───────────────────────────────────────────────────────
+    // Each satellite gets an equal time slot within PASS_CYCLE_SECS.
+    // Always exactly one satellite "in pass" — no gaps, no waiting.
+    const PASS_CYCLE_SECS = parseInt(process.env.PASS_CYCLE_SECS || '300'); // 5 min default
+    const PASS_SLOT_SECS  = Math.floor(PASS_CYCLE_SECS / SATELLITES.length);
+
+    // Which satellite is active at a given Unix timestamp
+    function activePassAt(tSec) {
+      const phase = tSec % PASS_CYCLE_SECS;
+      const idx   = Math.floor(phase / PASS_SLOT_SECS);
+      const sat   = SATELLITES[idx];
+      const slotStart = tSec - (phase % PASS_SLOT_SECS);
+      const slotEnd   = slotStart + PASS_SLOT_SECS;
+      return {
+        satellite:    sat.id,
+        startTime:    new Date(slotStart * 1000).toISOString(),
+        endTime:      new Date(slotEnd   * 1000).toISOString(),
+        durationSecs: PASS_SLOT_SECS,
+        maxElevation: parseFloat((20 + (sat.raan % 60)).toFixed(1)),
+        status:       'active',
+        freqMhz:      parseFloat((437.5 + (sat.raan % 50) * 0.01).toFixed(3)),
+      };
+    }
+
+    // Upcoming passes — current active + next N slots
+    function upcomingPasses(count = 6) {
+      const nowSec  = Math.floor(Date.now() / 1000);
+      const phase   = nowSec % PASS_CYCLE_SECS;
+      const slotIdx = Math.floor(phase / PASS_SLOT_SECS);
+      const passes  = [];
+
+      for (let i = 0; i < count; i++) {
+        const idx      = (slotIdx + i) % SATELLITES.length;
+        const sat      = SATELLITES[idx];
+        const slotsAhead = i;
+        const remainingInSlot = PASS_SLOT_SECS - (phase % PASS_SLOT_SECS);
+        const startOffset = i === 0 ? -(phase % PASS_SLOT_SECS)
+                                    : remainingInSlot + (i - 1) * PASS_SLOT_SECS;
+        const slotStart = nowSec + startOffset;
+        passes.push({
+          satellite:    sat.id,
+          startTime:    new Date(slotStart * 1000).toISOString(),
+          endTime:      new Date((slotStart + PASS_SLOT_SECS) * 1000).toISOString(),
+          durationSecs: PASS_SLOT_SECS,
+          maxElevation: parseFloat((20 + (sat.raan % 60)).toFixed(1)),
+          status:       i === 0 ? 'active' : 'scheduled',
+          freqMhz:      parseFloat((437.5 + (sat.raan % 50) * 0.01).toFixed(3)),
+        });
+      }
+      return passes;
+    }
+
+    // ── Orbital mechanics (positions only — not used for pass gating) ─────────────
+    function gmstRad(tSec) {
+      const JD      = tSec / 86400.0 + 2440587.5;
+      const T       = (JD - 2451545.0) / 36525.0;
+      const gmstDeg = 280.46061837 + 360.98564736629 * (JD - 2451545.0)
+                    + 0.000387933 * T * T - (T * T * T) / 38710000.0;
+      return (gmstDeg % 360) * DEG;
+    }
+
+    function positionAt(sat, tSec) {
+      const n       = (2 * Math.PI) / (sat.period * 60);
+      const M       = (n * tSec) % (2 * Math.PI);
+      const raanRad = sat.raan * DEG;
+      const inclRad = sat.inclination * DEG;
+      const xOrb = Math.cos(M), yOrb = Math.sin(M);
+      const x =  Math.cos(raanRad) * xOrb - Math.sin(raanRad) * Math.cos(inclRad) * yOrb;
+      const y =  Math.sin(raanRad) * xOrb + Math.cos(raanRad) * Math.cos(inclRad) * yOrb;
+      const z =  Math.sin(inclRad) * yOrb;
+      const th  = gmstRad(tSec);
+      const xEF =  x * Math.cos(th) + y * Math.sin(th);
+      const yEF = -x * Math.sin(th) + y * Math.cos(th);
+      return {
+        lat: parseFloat((Math.asin(Math.max(-1, Math.min(1, z))) / DEG).toFixed(4)),
+        lon: parseFloat((Math.atan2(yEF, xEF) / DEG).toFixed(4)),
+      };
+    }
+
+    function elevationAt(sat, tSec) {
+      const pos  = positionAt(sat, tSec);
+      const lat1 = STATION.lat * DEG, lon1 = STATION.lon * DEG;
+      const lat2 = pos.lat     * DEG, lon2 = pos.lon     * DEG;
+      const cosC = Math.sin(lat1)*Math.sin(lat2) + Math.cos(lat1)*Math.cos(lat2)*Math.cos(lon2-lon1);
+      const ca   = Math.acos(Math.max(-1, Math.min(1, cosC)));
+      const sinC = Math.sin(ca);
+      if (sinC < 1e-10) return 90;
+      return parseFloat((Math.atan((Math.cos(ca) - RE/(RE + sat.altitude)) / sinC) / DEG).toFixed(2));
+    }
+
+    function groundtrack(sat) {
+      const nowSec = Math.floor(Date.now() / 1000);
+      const points = [];
+      for (let dt = -1200; dt <= 2400; dt += 60) {
+        const pos = positionAt(sat, nowSec + dt);
+        points.push({ ...pos, t: new Date((nowSec + dt) * 1000).toISOString(), past: dt < 0 });
+      }
+      return points;
+    }
+
+    function allPositions() {
+      const nowSec  = Math.floor(Date.now() / 1000);
+      const active  = activePassAt(nowSec);
+      return SATELLITES.map(sat => {
+        const pos = positionAt(sat, nowSec);
+        const el  = elevationAt(sat, nowSec);
+        return {
+          id: sat.id, lat: pos.lat, lon: pos.lon, altitude: sat.altitude,
+          elevation: el, inView: sat.id === active.satellite,
+          inclination: sat.inclination, period: sat.period,
+        };
+      });
+    }
+
+    // ── HTTP server ───────────────────────────────────────────────────────────────
+    const server = http.createServer((req, res) => {
+      const t0 = Date.now();
+      res.setHeader('Content-Type', 'application/json');
+      res.setHeader('Access-Control-Allow-Origin', '*');
+
+      const reply = (status, body) => {
+        res.writeHead(status);
+        res.end(JSON.stringify(body));
+        if (req.url !== '/healthz') {
+          log('info', 'request', { method: req.method, path: req.url, status, ms: Date.now() - t0 });
+        }
+      };
+
+      if (req.url === '/healthz') return reply(200, { ok: true, service: 'orbit-engine' });
+
+      if (req.url === '/positions') {
+        const positions = allPositions();
+        const inView    = positions.filter(p => p.inView).map(p => p.id);
+        log('info', 'positions', { inView });
+        return reply(200, { positions, station: STATION, timestamp: new Date().toISOString() });
+      }
+
+      if (req.url === '/passes') {
+        const passes = upcomingPasses(6);
+        const active = passes.filter(p => p.status === 'active').map(p => p.satellite);
+        log('info', 'pass query', { total: passes.length, active });
+        return reply(200, { passes, station: STATION });
+      }
+
+      if (req.url.startsWith('/groundtrack/')) {
+        const id  = decodeURIComponent(req.url.replace('/groundtrack/', ''));
+        const sat = SATELLITES.find(s => s.id === id);
+        if (!sat) return reply(404, { error: 'Satellite not found' });
+        return reply(200, { satellite: id, track: groundtrack(sat) });
+      }
+
+      return reply(404, { error: 'Not found' });
+    });
+
+    const PORT = process.env.PORT || 3001;
+    server.listen(PORT, () => {
+      log('info', 'listening', {
+        port: PORT, satellites: SATELLITES.length,
+        passCycleSecs: PASS_CYCLE_SECS, passSlotSecs: PASS_SLOT_SECS,
+      });
+      const nowSec = Math.floor(Date.now() / 1000);
+      const active = activePassAt(nowSec);
+      const remaining = PASS_SLOT_SECS - (nowSec % PASS_CYCLE_SECS) % PASS_SLOT_SECS;
+      log('info', 'current active pass', { satellite: active.satellite, remainingSecs: remaining });
+    });

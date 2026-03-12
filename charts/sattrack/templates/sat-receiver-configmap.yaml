@@ -1,0 +1,215 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Release.Name }}-sat-receiver-code
+  labels:
+    app.kubernetes.io/name: {{ .Chart.Name }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/component: sat-receiver
+    app.kubernetes.io/part-of: {{ .Chart.Name }}
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+data:
+  server.js: |
+    /**
+     * sat-receiver
+     *
+     * Simulates the RF receive chain. Polls pass-planner every 5 seconds
+     * to check for an active pass. When a pass is active, generates
+     * synthetic telemetry frames and POSTs them to telemetry-store.
+     */
+    'use strict';
+
+    const http = require('http');
+
+    const PASS_PLANNER_URL    = process.env.PASS_PLANNER_URL    || 'http://localhost:3002';
+    const TELEMETRY_STORE_URL = process.env.TELEMETRY_STORE_URL || 'http://localhost:3003';
+    const FRAME_INTERVAL_MS   = parseInt(process.env.FRAME_INTERVAL_MS || '1500');
+    const POLL_INTERVAL_MS    = 5000;
+    const TIMEOUT_MS          = 3000;
+
+    // ── Structured logger ─────────────────────────────────────────────────────────
+    function log(level, msg, fields = {}) {
+      console.log(JSON.stringify({ ts: new Date().toISOString(), level, svc: 'sat-receiver', msg, ...fields }));
+    }
+
+    // ── State ─────────────────────────────────────────────────────────────────────
+    let currentPass    = null;
+    let framesThisPass = 0;
+    let frameSeq       = 1000;
+    let receiverStatus = 'idle';
+    let consecutiveFrameErrors = 0;
+
+    // ── Upstream helpers ──────────────────────────────────────────────────────────
+    function fetchJson(url) {
+      return new Promise((resolve, reject) => {
+        const timer = setTimeout(() => reject(new Error(`timeout after ${TIMEOUT_MS}ms`)), TIMEOUT_MS);
+        const req   = http.get(url, (res) => {
+          clearTimeout(timer);
+          let body = '';
+          res.on('data', c => body += c);
+          res.on('end', () => {
+            try { resolve(JSON.parse(body)); }
+            catch (e) { reject(new Error('invalid JSON')); }
+          });
+        });
+        req.on('error', e => { clearTimeout(timer); reject(e); });
+      });
+    }
+
+    function postFrame(frame) {
+      return new Promise((resolve, reject) => {
+        const body  = JSON.stringify(frame);
+        const timer = setTimeout(() => reject(new Error(`timeout after ${TIMEOUT_MS}ms`)), TIMEOUT_MS);
+        const req   = http.request(
+          `${TELEMETRY_STORE_URL}/frames`,
+          { method: 'POST', headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body) } },
+          (res) => { clearTimeout(timer); res.resume(); resolve(res.statusCode); }
+        );
+        req.on('error', e => { clearTimeout(timer); reject(e); });
+        req.write(body);
+        req.end();
+      });
+    }
+
+    // ── Frame generation ──────────────────────────────────────────────────────────
+    function generateFrame(satelliteId) {
+      const now   = Date.now();
+      const orbit = Math.floor(now / (95 * 60 * 1000));
+      return {
+        frameId:     `${satelliteId}-${now}-${frameSeq}`,
+        satellite:   satelliteId,
+        timestamp:   new Date().toISOString(),
+        seqNumber:   frameSeq++,
+        orbitNumber: orbit,
+        signalDbm:   parseFloat((-82 + Math.sin(frameSeq * 0.1) * 8).toFixed(2)),
+        snrDb:       parseFloat((18.5 + Math.cos(frameSeq * 0.08) * 4).toFixed(2)),
+        frameErrors: Math.random() < 0.04 ? Math.floor(Math.random() * 3) + 1 : 0,
+        batteryV:    parseFloat((28.2 + Math.sin(frameSeq * 0.05) * 0.6).toFixed(3)),
+        tempC:       parseFloat((21.8 + Math.cos(frameSeq * 0.07) * 4).toFixed(2)),
+        solarW:      parseFloat((44.0 + Math.sin(frameSeq * 0.12) * 7).toFixed(2)),
+        attitude: {
+          roll:  parseFloat((Math.sin(frameSeq * 0.15) * 1.5).toFixed(3)),
+          pitch: parseFloat((Math.cos(frameSeq * 0.12) * 1.5).toFixed(3)),
+          yaw:   parseFloat(((frameSeq * 1.1) % 360).toFixed(3)),
+        },
+        mode: 'nominal',
+      };
+    }
+
+    // ── Pass management ───────────────────────────────────────────────────────────
+    let frameTimer = null;
+
+    async function startFrameTransmission(pass) {
+      framesThisPass         = 0;
+      consecutiveFrameErrors = 0;
+      receiverStatus         = 'receiving';
+      log('info', 'pass started — beginning frame transmission', {
+        satellite:    pass.satellite,
+        maxElevation: pass.maxElevation,
+        freqMhz:      pass.freqMhz,
+        frameIntervalMs: FRAME_INTERVAL_MS,
+      });
+
+      frameTimer = setInterval(async () => {
+        const frame = generateFrame(pass.satellite);
+        const t0    = Date.now();
+        try {
+          const status = await postFrame(frame);
+          framesThisPass++;
+          consecutiveFrameErrors = 0;
+          // Log every 10th frame to avoid flooding, but always log the first
+          if (framesThisPass === 1 || framesThisPass % 10 === 0) {
+            log('info', 'frame transmitted', {
+              satellite:     frame.satellite,
+              frameId:       frame.frameId,
+              seq:           frame.seqNumber,
+              framesThisPass,
+              snrDb:         frame.snrDb,
+              httpStatus:    status,
+              ms:            Date.now() - t0,
+            });
+          }
+        } catch (err) {
+          consecutiveFrameErrors++;
+          log('error', 'frame POST failed', {
+            satellite:  pass.satellite,
+            frameId:    frame.frameId,
+            seq:        frame.seqNumber,
+            error:      err.message,
+            consecutive: consecutiveFrameErrors,
+            ms:         Date.now() - t0,
+          });
+          if (consecutiveFrameErrors === 3) {
+            log('warn', 'telemetry-store appears unresponsive — 3 consecutive failures', {
+              satellite: pass.satellite,
+              url:       TELEMETRY_STORE_URL,
+            });
+          }
+        }
+      }, FRAME_INTERVAL_MS);
+    }
+
+    function stopFrameTransmission(reason = 'pass ended') {
+      if (frameTimer) { clearInterval(frameTimer); frameTimer = null; }
+      log('info', reason, { satellite: currentPass, framesTransmitted: framesThisPass });
+      framesThisPass = 0;
+      receiverStatus = 'idle';
+      currentPass    = null;
+    }
+
+    // ── Poll pass-planner ─────────────────────────────────────────────────────────
+    let idleHeartbeatCount = 0;
+
+    async function pollPassPlanner() {
+      try {
+        const data = await fetchJson(`${PASS_PLANNER_URL}/active`);
+
+        if (data.hasActive && data.active) {
+          const passId = data.active.satellite;
+          if (!currentPass || currentPass !== passId) {
+            if (currentPass) stopFrameTransmission('pass handoff — new satellite acquired');
+            currentPass = passId;
+            await startFrameTransmission(data.active);
+          }
+          idleHeartbeatCount = 0;
+        } else {
+          if (currentPass) stopFrameTransmission('pass window closed');
+          // Periodic idle heartbeat every 60s (12 × 5s poll interval)
+          idleHeartbeatCount++;
+          if (idleHeartbeatCount % 12 === 1) {
+            log('info', 'idle — no active pass', { nextPollMs: POLL_INTERVAL_MS });
+          }
+        }
+      } catch (err) {
+        log('error', 'pass-planner poll failed', { url: PASS_PLANNER_URL, error: err.message });
+      }
+    }
+
+    setInterval(pollPassPlanner, POLL_INTERVAL_MS);
+    pollPassPlanner();
+
+    // ── HTTP server ───────────────────────────────────────────────────────────────
+    const server = http.createServer((req, res) => {
+      res.setHeader('Content-Type', 'application/json');
+      res.setHeader('Access-Control-Allow-Origin', '*');
+
+      if (req.url === '/healthz') {
+        res.writeHead(200);
+        return res.end(JSON.stringify({ ok: true, service: 'sat-receiver' }));
+      }
+
+      if (req.url === '/status') {
+        res.writeHead(200);
+        return res.end(JSON.stringify({
+          status: receiverStatus, currentPass, framesThisPass, frameSeq, frameIntervalMs: FRAME_INTERVAL_MS,
+        }));
+      }
+
+      res.writeHead(404);
+      res.end(JSON.stringify({ error: 'Not found' }));
+    });
+
+    const PORT = process.env.PORT || 3004;
+    server.listen(PORT, () => log('info', 'listening', {
+      port: PORT, passPlannerUrl: PASS_PLANNER_URL, telemetryStoreUrl: TELEMETRY_STORE_URL, frameIntervalMs: FRAME_INTERVAL_MS,
+    }));

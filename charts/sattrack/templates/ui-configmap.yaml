@@ -1,0 +1,771 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Release.Name }}-ui-code
+  labels:
+    app.kubernetes.io/name: {{ .Chart.Name }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/component: ui
+    app.kubernetes.io/part-of: {{ .Chart.Name }}
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+data:
+  nginx.conf: |
+    server {
+      listen 80;
+      root /usr/share/nginx/html;
+      index index.html;
+
+      location /api/ {
+        proxy_pass http://{{ .Release.Name }}-tracker-api:{{ .Values.trackerApi.port }}/;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_read_timeout 10s;
+      }
+
+      location / {
+        try_files $uri $uri/ /index.html;
+      }
+    }
+
+  index.html: |
+    <!DOCTYPE html>
+    <html lang="en">
+    <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SATTRACK · DS-7</title>
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+    <style>
+    :root {
+      --bg:         #080b10;
+      --surface:    #0c1117;
+      --surface2:   #101820;
+      --border:     #162030;
+      --border2:    #1e2f42;
+      --green:      #1fff8e;
+      --green-dim:  #0d7a40;
+      --green-faint:#03180e;
+      --amber:      #ffcf44;
+      --amber-dim:  #7a5e10;
+      --red:        #ff4d4d;
+      --red-dim:    #7a1a1a;
+      --red-faint:  #180808;
+      --blue:       #4db8ff;
+      --blue-dim:   #1a4f80;
+      --text:       #7a9ab5;
+      --text-hi:    #c8dff0;
+      --text-lo:    #2e4a62;
+      --mono:       'Space Mono', monospace;
+      --sans:       'Space Grotesk', sans-serif;
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--sans);
+      height: 100vh;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* ── Header ──────────────────────────────────────────────────── */
+    .header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 20px;
+      height: 44px;
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
+    }
+
+    .logo {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .logo-icon {
+      width: 24px; height: 24px;
+      border: 1.5px solid var(--green-dim);
+      border-radius: 50%;
+      position: relative;
+      display: flex; align-items: center; justify-content: center;
+    }
+    .logo-icon::before {
+      content: '';
+      position: absolute;
+      width: 36px; height: 1px;
+      background: linear-gradient(90deg, transparent, var(--green-dim), transparent);
+      transform: rotate(-30deg);
+    }
+    .logo-icon::after {
+      content: '';
+      width: 6px; height: 6px;
+      background: var(--green);
+      border-radius: 50%;
+      box-shadow: 0 0 8px var(--green);
+      animation: sat-pulse 3s ease-in-out infinite;
+    }
+
+    @keyframes sat-pulse {
+      0%, 100% { opacity: 1; } 50% { opacity: 0.4; }
+    }
+
+    .logo-name {
+      font-family: var(--mono);
+      font-size: 14px;
+      font-weight: 700;
+      color: var(--text-hi);
+      letter-spacing: 0.12em;
+    }
+    .logo-station {
+      font-size: 10px;
+      color: var(--text-lo);
+      font-family: var(--mono);
+      letter-spacing: 0.1em;
+    }
+
+    .header-chips {
+      display: flex;
+      gap: 5px;
+    }
+
+    .chip {
+      font-family: var(--mono);
+      font-size: 9px;
+      letter-spacing: 0.1em;
+      padding: 3px 9px;
+      border: 1px solid var(--border2);
+      color: var(--text-lo);
+      text-transform: uppercase;
+      white-space: nowrap;
+    }
+    .chip.ok   { border-color: var(--green-dim); color: var(--green); }
+    .chip.warn { border-color: var(--amber-dim); color: var(--amber); animation: flicker 2s infinite; }
+    .chip.err  { border-color: var(--red-dim);   color: var(--red);   animation: flicker 1s infinite; }
+
+    @keyframes flicker { 0%,100%{opacity:1} 50%{opacity:0.45} }
+
+    .header-right {
+      font-family: var(--mono);
+      font-size: 10px;
+      text-align: right;
+      color: var(--text-lo);
+      line-height: 1.6;
+    }
+    .header-clock { font-size: 13px; color: var(--text-hi); }
+
+    /* ── Degraded banner ─────────────────────────────────────────── */
+    .deg-banner {
+      display: none;
+      padding: 5px 20px;
+      background: var(--red-faint);
+      border-bottom: 1px solid var(--red-dim);
+      font-family: var(--mono);
+      font-size: 9px;
+      letter-spacing: 0.12em;
+      color: var(--red);
+      text-align: center;
+      animation: flicker 2s infinite;
+      flex-shrink: 0;
+    }
+    .deg-banner.show { display: block; }
+
+    /* ── Layout ──────────────────────────────────────────────────── */
+    .layout {
+      display: grid;
+      grid-template-columns: 260px 1fr 260px;
+      grid-template-rows: 1fr 180px;
+      flex: 1;
+      overflow: hidden;
+      gap: 1px;
+      background: var(--border);
+    }
+
+    .panel {
+      background: var(--surface);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    .panel-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 8px 14px;
+      border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
+    }
+
+    .panel-title {
+      font-family: var(--mono);
+      font-size: 8px;
+      letter-spacing: 0.22em;
+      text-transform: uppercase;
+      color: var(--text-lo);
+    }
+
+    .panel-tag {
+      font-family: var(--mono);
+      font-size: 8px;
+      padding: 2px 7px;
+      border: 1px solid var(--border2);
+      color: var(--text-lo);
+      letter-spacing: 0.06em;
+    }
+    .panel-tag.ok   { border-color: var(--green-dim); color: var(--green-dim); }
+    .panel-tag.warn { border-color: var(--amber-dim); color: var(--amber); }
+    .panel-tag.err  { border-color: var(--red-dim);   color: var(--red); }
+
+    .panel-body {
+      flex: 1;
+      overflow-y: auto;
+      padding: 12px 14px;
+      scrollbar-width: thin;
+      scrollbar-color: var(--border2) transparent;
+    }
+
+    /* ── Ground track map ────────────────────────────────────────── */
+    .map-panel { grid-column: 2; grid-row: 1; }
+
+    .map-canvas-wrap {
+      flex: 1;
+      position: relative;
+      overflow: hidden;
+    }
+
+    canvas#map {
+      width: 100%;
+      height: 100%;
+      display: block;
+    }
+
+    .map-legend {
+      position: absolute;
+      bottom: 10px;
+      left: 14px;
+      display: flex;
+      gap: 12px;
+    }
+
+    .legend-item {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      font-family: var(--mono);
+      font-size: 9px;
+      color: var(--text-lo);
+    }
+
+    .legend-dot {
+      width: 8px; height: 8px;
+      border-radius: 50%;
+    }
+
+    /* ── Satellite positions (left) ──────────────────────────────── */
+    .sat-card {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      padding: 10px 12px;
+      margin-bottom: 8px;
+    }
+
+    .sat-card.inview {
+      border-color: var(--green-dim);
+      background: var(--green-faint);
+    }
+
+    .sat-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 8px;
+    }
+
+    .sat-id { font-family: var(--mono); font-size: 12px; font-weight: 700; color: var(--text-hi); }
+
+    .sat-badge {
+      font-family: var(--mono);
+      font-size: 8px;
+      letter-spacing: 0.1em;
+      padding: 2px 7px;
+      text-transform: uppercase;
+    }
+    .sat-badge.inview  { background: var(--green-faint); color: var(--green); border: 1px solid var(--green-dim); }
+    .sat-badge.offview { color: var(--text-lo); border: 1px solid var(--border2); }
+
+    .sat-row {
+      display: flex;
+      justify-content: space-between;
+      font-size: 10px;
+      margin-bottom: 3px;
+    }
+    .sat-key { color: var(--text-lo); font-family: var(--mono); }
+    .sat-val { color: var(--text); font-family: var(--mono); }
+    .sat-val.hi { color: var(--text-hi); }
+
+    /* ── Pass schedule (right) ───────────────────────────────────── */
+    .pass-row {
+      display: grid;
+      grid-template-columns: 80px 1fr 55px;
+      gap: 6px;
+      padding: 8px 0;
+      border-bottom: 1px solid var(--border);
+      align-items: start;
+      font-size: 10px;
+    }
+
+    .pass-sat  { font-family: var(--mono); font-weight: 700; color: var(--text-hi); font-size: 11px; }
+    .pass-meta { font-family: var(--mono); color: var(--text-lo); font-size: 9px; line-height: 1.7; }
+
+    .pass-pill {
+      font-family: var(--mono);
+      font-size: 8px;
+      letter-spacing: 0.08em;
+      padding: 2px 6px;
+      text-transform: uppercase;
+      text-align: center;
+    }
+    .pass-pill.active    { background: rgba(31,255,142,0.1); color: var(--green); border: 1px solid var(--green-dim); }
+    .pass-pill.scheduled { color: var(--text-lo); border: 1px solid var(--border2); }
+
+    /* ── Bottom bar ──────────────────────────────────────────────── */
+    .bottom-bar {
+      grid-column: 1 / 4;
+      grid-row: 2;
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr 1fr;
+      background: var(--surface);
+      gap: 1px;
+    }
+
+    .metric-cell {
+      background: var(--surface);
+      padding: 14px 16px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+    }
+
+    .metric-label { font-family: var(--mono); font-size: 8px; letter-spacing: 0.18em; color: var(--text-lo); text-transform: uppercase; margin-bottom: 6px; }
+    .metric-value { font-family: var(--mono); font-size: 22px; font-weight: 700; color: var(--text-hi); line-height: 1; }
+    .metric-value.ok   { color: var(--green); }
+    .metric-value.warn { color: var(--amber); }
+    .metric-value.err  { color: var(--red); animation: flicker 1s infinite; }
+    .metric-sub   { font-family: var(--mono); font-size: 9px; color: var(--text-lo); margin-top: 4px; }
+
+    .tel-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+    .tel-item { background: var(--surface2); border: 1px solid var(--border); padding: 6px 9px; }
+    .tel-sat  { font-family: var(--mono); font-size: 9px; color: var(--text-lo); margin-bottom: 3px; }
+    .tel-snr  { font-family: var(--mono); font-size: 12px; color: var(--text-hi); }
+    .tel-snr.good { color: var(--green); }
+    .tel-snr.warn { color: var(--amber); }
+    .tel-err  { font-family: var(--mono); font-size: 9px; color: var(--text-lo); margin-top: 2px; }
+
+    .err-cell {
+      background: var(--red-faint);
+      border: 1px dashed var(--red-dim);
+      color: var(--red);
+      font-family: var(--mono);
+      font-size: 9px;
+      padding: 10px;
+      text-align: center;
+      letter-spacing: 0.08em;
+    }
+
+    /* Scrollbars */
+    ::-webkit-scrollbar { width: 3px; }
+    ::-webkit-scrollbar-thumb { background: var(--border2); }
+    </style>
+    </head>
+    <body>
+
+    <div class="header">
+      <div class="logo">
+        <div class="logo-icon"></div>
+        <div>
+          <div class="logo-name">SATTRACK</div>
+          <div class="logo-station">DS-7 · REDU, BELGIUM · 50.00°N 5.14°E</div>
+        </div>
+      </div>
+      <div class="header-chips">
+        <div class="chip" id="chip-orbit">ORBIT —</div>
+        <div class="chip" id="chip-planner">PLANNER —</div>
+        <div class="chip" id="chip-telemetry">TELEMETRY —</div>
+        <div class="chip" id="chip-receiver">RECEIVER —</div>
+        <div class="chip" id="chip-api">API —</div>
+      </div>
+      <div class="header-right">
+        <div class="header-clock" id="clock">--:--:-- UTC</div>
+        <div id="last-poll">last poll: —</div>
+      </div>
+    </div>
+
+    <div class="deg-banner" id="deg-banner">⚠ &nbsp; DEGRADED — ONE OR MORE UPSTREAM SERVICES UNAVAILABLE — DATA MAY BE INCOMPLETE</div>
+
+    <div class="layout">
+
+      <!-- Left: satellite positions -->
+      <div class="panel">
+        <div class="panel-head">
+          <span class="panel-title">Satellite Positions</span>
+          <span class="panel-tag" id="tag-sats">—</span>
+        </div>
+        <div class="panel-body" id="sat-list">
+          <div style="font-family:var(--mono);font-size:10px;color:var(--text-lo)">Loading…</div>
+        </div>
+      </div>
+
+      <!-- Center: ground track map -->
+      <div class="panel map-panel">
+        <div class="panel-head">
+          <span class="panel-title">Ground Track</span>
+          <span class="panel-tag ok" id="tag-map">LIVE</span>
+        </div>
+        <div class="map-canvas-wrap">
+          <canvas id="map"></canvas>
+          <div class="map-legend">
+            <div class="legend-item"><div class="legend-dot" style="background:var(--green)"></div>In view</div>
+            <div class="legend-item"><div class="legend-dot" style="background:var(--blue)"></div>Scheduled</div>
+            <div class="legend-item"><div class="legend-dot" style="background:var(--text-lo)"></div>DS-7</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Right: pass schedule -->
+      <div class="panel">
+        <div class="panel-head">
+          <span class="panel-title">Pass Schedule</span>
+          <span class="panel-tag" id="tag-passes">—</span>
+        </div>
+        <div class="panel-body" id="pass-list">
+          <div style="font-family:var(--mono);font-size:10px;color:var(--text-lo)">Loading…</div>
+        </div>
+      </div>
+
+      <!-- Bottom bar: 4 metric cells -->
+      <div class="bottom-bar">
+
+        <!-- Receiver status -->
+        <div class="metric-cell" style="border-right:1px solid var(--border);">
+          <div class="metric-label">Receiver</div>
+          <div class="metric-value" id="metric-receiver-status">—</div>
+          <div class="metric-sub" id="metric-receiver-sub">—</div>
+        </div>
+
+        <!-- Frames this pass -->
+        <div class="metric-cell" style="border-right:1px solid var(--border);">
+          <div class="metric-label">Frames This Pass</div>
+          <div class="metric-value ok" id="metric-frames">—</div>
+          <div class="metric-sub" id="metric-frames-sub">—</div>
+        </div>
+
+        <!-- Telemetry quality grid -->
+        <div class="metric-cell" style="border-right:1px solid var(--border);">
+          <div class="metric-label">Signal Quality</div>
+          <div id="tel-quality-grid">
+            <div style="font-family:var(--mono);font-size:10px;color:var(--text-lo)">Loading…</div>
+          </div>
+        </div>
+
+        <!-- API latency sparkline -->
+        <div class="metric-cell">
+          <div class="metric-label">API Response</div>
+          <div class="metric-value" id="metric-latency">—</div>
+          <div class="metric-sub" id="metric-latency-sub">tracker-api p99</div>
+        </div>
+
+      </div>
+    </div>
+
+    <script>
+    const POLL_MS  = 2000;
+    const SAT_COLORS = {
+      'HELIX-7':  '#1fff8e',
+      'CYGNUS-3': '#4db8ff',
+      'ORION-12': '#ffcf44',
+      'VEGA-5':   '#ff7eb3',
+    };
+
+    // ── Clock ─────────────────────────────────────────────────────
+    function utcTime(d) { return (d || new Date()).toUTCString().split(' ')[4]; }
+    setInterval(() => document.getElementById('clock').textContent = utcTime() + ' UTC', 1000);
+
+    function rel(iso) {
+      const s = (new Date(iso) - Date.now()) / 1000;
+      if (s < 0)    return 'passed';
+      if (s < 60)   return `${Math.round(s)}s`;
+      if (s < 3600) return `${Math.round(s/60)}m`;
+      return `${Math.round(s/3600)}h`;
+    }
+
+    // ── Ground track map ──────────────────────────────────────────
+    const canvas = document.getElementById('map');
+    const ctx    = canvas.getContext('2d');
+    let lastPositions = [];
+
+    function resizeCanvas() {
+      const wrap  = canvas.parentElement;
+      canvas.width  = wrap.clientWidth;
+      canvas.height = wrap.clientHeight;
+      drawMap(lastPositions);
+    }
+
+    window.addEventListener('resize', resizeCanvas);
+
+    function lonToX(lon) { return ((lon + 180) / 360) * canvas.width; }
+    function latToY(lat) { return ((90 - lat) / 180) * canvas.height; }
+
+    function drawMap(positions) {
+      lastPositions = positions || [];
+      const W = canvas.width, H = canvas.height;
+      ctx.clearRect(0, 0, W, H);
+
+      // Background
+      ctx.fillStyle = '#080b10';
+      ctx.fillRect(0, 0, W, H);
+
+      // Grid lines
+      ctx.strokeStyle = '#111e2c';
+      ctx.lineWidth   = 0.5;
+      for (let lon = -180; lon <= 180; lon += 30) {
+        ctx.beginPath();
+        ctx.moveTo(lonToX(lon), 0);
+        ctx.lineTo(lonToX(lon), H);
+        ctx.stroke();
+      }
+      for (let lat = -90; lat <= 90; lat += 30) {
+        ctx.beginPath();
+        ctx.moveTo(0,    latToY(lat));
+        ctx.lineTo(W,    latToY(lat));
+        ctx.stroke();
+      }
+
+      // Equator slightly brighter
+      ctx.strokeStyle = '#1a2d42';
+      ctx.lineWidth   = 1;
+      ctx.beginPath();
+      ctx.moveTo(0, latToY(0)); ctx.lineTo(W, latToY(0));
+      ctx.stroke();
+
+      // DS-7 station marker
+      const sx = lonToX(5.14), sy = latToY(50.0);
+      ctx.strokeStyle = '#2e4a62';
+      ctx.lineWidth   = 1;
+      ctx.beginPath();
+      ctx.arc(sx, sy, 12, 0, 2 * Math.PI);
+      ctx.stroke();
+      ctx.fillStyle = '#4db8ff';
+      ctx.beginPath();
+      ctx.arc(sx, sy, 3, 0, 2 * Math.PI);
+      ctx.fill();
+
+      // Satellites
+      positions.forEach(sat => {
+        const color = SAT_COLORS[sat.id] || '#ffffff';
+        const x     = lonToX(sat.lon);
+        const y     = latToY(sat.lat);
+
+        // Position dot
+        ctx.fillStyle   = color;
+        ctx.shadowColor = color;
+        ctx.shadowBlur  = sat.inView ? 10 : 0;
+        ctx.beginPath();
+        ctx.arc(x, y, sat.inView ? 5 : 3.5, 0, 2 * Math.PI);
+        ctx.fill();
+        ctx.shadowBlur = 0;
+
+        // Label
+        ctx.fillStyle = color;
+        ctx.font      = '9px "Space Mono"';
+        ctx.fillText(sat.id, x + 7, y - 5);
+      });
+    }
+
+    // ── Render satellite list ─────────────────────────────────────
+    function renderSats(positions) {
+      const el = document.getElementById('sat-list');
+      document.getElementById('tag-sats').textContent = positions.length + ' tracked';
+      document.getElementById('tag-sats').className   = 'panel-tag ok';
+
+      el.innerHTML = positions.map(sat => `
+        <div class="sat-card ${sat.inView ? 'inview' : ''}">
+          <div class="sat-head">
+            <span class="sat-id" style="color:${SAT_COLORS[sat.id] || 'var(--text-hi)'}">${sat.id}</span>
+            <span class="sat-badge ${sat.inView ? 'inview' : 'offview'}">${sat.inView ? 'IN VIEW' : 'NO CONTACT'}</span>
+          </div>
+          <div class="sat-row"><span class="sat-key">LAT</span><span class="sat-val hi">${sat.lat.toFixed(2)}°</span></div>
+          <div class="sat-row"><span class="sat-key">LON</span><span class="sat-val hi">${sat.lon.toFixed(2)}°</span></div>
+          <div class="sat-row"><span class="sat-key">ALT</span><span class="sat-val">${sat.altitude} km</span></div>
+          <div class="sat-row"><span class="sat-key">ELEV</span><span class="sat-val ${sat.elevation > 5 ? 'hi' : ''}">${sat.elevation.toFixed(1)}°</span></div>
+          <div class="sat-row"><span class="sat-key">INC</span><span class="sat-val">${sat.inclination}°</span></div>
+        </div>
+      `).join('');
+    }
+
+    // ── Render pass schedule ──────────────────────────────────────
+    function renderPasses(schedule) {
+      const el    = document.getElementById('pass-list');
+      const tag   = document.getElementById('tag-passes');
+      if (!schedule || schedule.length === 0) {
+        el.innerHTML = '<div class="err-cell">NO SCHEDULE DATA</div>';
+        tag.textContent = 'ERR'; tag.className = 'panel-tag err';
+        return;
+      }
+      const active = schedule.filter(p => p.status === 'active').length;
+      tag.textContent = active > 0 ? `${active} ACTIVE` : `${schedule.length} upcoming`;
+      tag.className   = active > 0 ? 'panel-tag ok' : 'panel-tag';
+
+      el.innerHTML = schedule.map(p => `
+        <div class="pass-row">
+          <span class="pass-sat" style="color:${SAT_COLORS[p.satellite] || 'var(--text-hi)'}">${p.satellite}</span>
+          <div class="pass-meta">
+            ${utcTime(new Date(p.startTime))}<br>
+            in ${rel(p.startTime)} · ${p.durationSecs}s · ${p.maxElevation}° max
+          </div>
+          <span class="pass-pill ${p.status}">${p.status}</span>
+        </div>
+      `).join('');
+    }
+
+    // ── Render telemetry quality ──────────────────────────────────
+    function renderTelemetry(telemetry) {
+      const el = document.getElementById('tel-quality-grid');
+      if (!telemetry || !telemetry.quality || telemetry.quality.length === 0) {
+        el.innerHTML = '<div class="err-cell">TELEMETRY UNAVAILABLE</div>';
+        return;
+      }
+      el.innerHTML = `<div class="tel-grid">` +
+        telemetry.quality.map(q => `
+          <div class="tel-item">
+            <div class="tel-sat">${q.satellite}</div>
+            <div class="tel-snr ${q.avgSnrDb > 15 ? 'good' : 'warn'}">${q.avgSnrDb.toFixed(1)} dB</div>
+            <div class="tel-err">ERR ${(q.frameErrorRate * 100).toFixed(1)}%</div>
+          </div>
+        `).join('') + `</div>`;
+    }
+
+    // ── Render receiver status ────────────────────────────────────
+    function renderReceiver(receiver) {
+      const statusEl = document.getElementById('metric-receiver-status');
+      const subEl    = document.getElementById('metric-receiver-sub');
+      const framesEl = document.getElementById('metric-frames');
+      const framesSub = document.getElementById('metric-frames-sub');
+
+      if (!receiver) {
+        statusEl.textContent = 'ERR';
+        statusEl.className   = 'metric-value err';
+        subEl.textContent    = 'sat-receiver unreachable';
+        framesEl.textContent = '—';
+        return;
+      }
+
+      const isReceiving = receiver.status === 'receiving';
+      statusEl.textContent = receiver.status.toUpperCase();
+      statusEl.className   = `metric-value ${isReceiving ? 'ok' : ''}`;
+      subEl.textContent    = isReceiving ? `↓ ${receiver.currentPass}` : 'awaiting pass window';
+
+      framesEl.textContent = isReceiving ? receiver.framesThisPass : '—';
+      framesEl.className   = `metric-value ${isReceiving ? 'ok' : ''}`;
+      framesSub.textContent = isReceiving
+        ? `seq ${receiver.frameSeq} · every ${receiver.frameIntervalMs}ms`
+        : 'no active pass';
+    }
+
+    // ── Main poll ─────────────────────────────────────────────────
+    function setChip(id, state, label) {
+      const el = document.getElementById(id);
+      el.className = 'chip ' + state;
+      el.textContent = label;
+    }
+
+    // ── Banner helpers ────────────────────────────────────────────
+    const banner = document.getElementById('deg-banner');
+    const DEFAULT_BANNER_TEXT = '⚠ &nbsp; DEGRADED — ONE OR MORE UPSTREAM SERVICES UNAVAILABLE — DATA MAY BE INCOMPLETE';
+
+    function showBanner(text) {
+      banner.innerHTML = text || DEFAULT_BANNER_TEXT;
+      banner.className = 'deg-banner show';
+    }
+
+    function hideBanner() {
+      banner.className = 'deg-banner';
+      banner.innerHTML = DEFAULT_BANNER_TEXT;
+    }
+
+    // ── API-down state — tracks consecutive failures ───────────────
+    let apiDownCount = 0;
+
+    function setApiDown(ms) {
+      apiDownCount++;
+      setChip('chip-api',      'err',  'API DOWN');
+      setChip('chip-orbit',    'err',  'ORBIT —');
+      setChip('chip-planner',  'err',  'PLANNER —');
+      setChip('chip-telemetry','err',  'TELEMETRY —');
+      setChip('chip-receiver', 'err',  'RECEIVER —');
+      document.getElementById('metric-latency').textContent = ms + 'ms';
+      document.getElementById('metric-latency').className   = 'metric-value err';
+      showBanner(`⚠ &nbsp; TRACKER-API UNREACHABLE — ALL DATA STALE (${apiDownCount} consecutive failure${apiDownCount > 1 ? 's' : ''})`);
+    }
+
+    function setApiUp() {
+      apiDownCount = 0;
+    }
+
+    async function poll() {
+      const t0 = Date.now();
+      try {
+        const res  = await fetch('/api/dashboard');
+        const data = await res.json();
+        const ms   = Date.now() - t0;
+
+        // API is reachable — clear any previous down state
+        setApiUp();
+
+        document.getElementById('last-poll').textContent = 'last poll: ' + utcTime();
+
+        const errors   = data.meta?.errors || {};
+        const degraded = data.meta?.degraded || false;
+
+        if (degraded) {
+          showBanner();
+        } else {
+          hideBanner();
+        }
+
+        // Chips — always written on every successful poll
+        setChip('chip-api',      ms > 2000 ? 'warn' : 'ok', `API ${ms}ms`);
+        setChip('chip-orbit',    errors.orbit     ? 'err' : 'ok', errors.orbit     ? 'ORBIT ERR'    : 'ORBIT OK');
+        setChip('chip-planner',  errors.schedule  ? 'err' : 'ok', errors.schedule  ? 'PLANNER ERR'  : 'PLANNER OK');
+        setChip('chip-telemetry',errors.telemetry ? 'err' : 'ok', errors.telemetry ? 'TELEMETRY ERR': 'TELEMETRY OK');
+        setChip('chip-receiver', errors.receiver  ? 'warn': 'ok', errors.receiver  ? 'RECEIVER WARN': 'RECEIVER OK');
+
+        // Latency metric
+        const latEl = document.getElementById('metric-latency');
+        latEl.textContent = ms + 'ms';
+        latEl.className   = `metric-value ${ms > 2000 ? 'err' : ms > 800 ? 'warn' : 'ok'}`;
+
+        // Panels
+        if (data.positions?.length) { drawMap(data.positions); renderSats(data.positions); }
+        renderPasses(data.schedule);
+        renderTelemetry(data.telemetry);
+        renderReceiver(data.receiver);
+
+      } catch (err) {
+        console.error('Error fetching dashboard data:', err);
+        setApiDown(Date.now() - t0);
+      }
+    }
+
+    resizeCanvas();
+    poll();
+    setInterval(poll, POLL_MS);
+    </script>
+    </body>
+    </html>

@@ -1,0 +1,157 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Release.Name }}-tracker-api-code
+  labels:
+    app.kubernetes.io/name: {{ .Chart.Name }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/component: tracker-api
+    app.kubernetes.io/part-of: {{ .Chart.Name }}
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+data:
+  server.js: |
+    /**
+     * tracker-api
+     *
+     * Single backend for the sattrack-ui dashboard.
+     * Fan-out to orbit-engine, pass-planner, telemetry-store and sat-receiver
+     * in parallel. Pure aggregation — no business logic of its own.
+     *
+     * Degraded responses use HTTP 207 so the UI can distinguish partial data
+     * from a total failure.
+     */
+    'use strict';
+
+    const http = require('http');
+
+    const ORBIT_ENGINE_URL    = process.env.ORBIT_ENGINE_URL    || 'http://localhost:3001';
+    const PASS_PLANNER_URL    = process.env.PASS_PLANNER_URL    || 'http://localhost:3002';
+    const TELEMETRY_STORE_URL = process.env.TELEMETRY_STORE_URL || 'http://localhost:3003';
+    const SAT_RECEIVER_URL    = process.env.SAT_RECEIVER_URL    || 'http://localhost:3004';
+    const TIMEOUT_MS          = parseInt(process.env.UPSTREAM_TIMEOUT_MS || '4000');
+
+    // ── Structured logger ─────────────────────────────────────────────────────────
+    function log(level, msg, fields = {}) {
+      console.log(JSON.stringify({ ts: new Date().toISOString(), level, svc: 'tracker-api', msg, ...fields }));
+    }
+
+    // ── Upstream fetch ────────────────────────────────────────────────────────────
+    function fetchJson(url) {
+      return new Promise((resolve, reject) => {
+        const t0    = Date.now();
+        const timer = setTimeout(() => {
+          log('warn', 'upstream timeout', { url, timeoutMs: TIMEOUT_MS });
+          reject(new Error(`timeout after ${TIMEOUT_MS}ms: ${url}`));
+        }, TIMEOUT_MS);
+
+        const req = http.get(url, (res) => {
+          clearTimeout(timer);
+          let body = '';
+          res.on('data', c => body += c);
+          res.on('end', () => {
+            const ms = Date.now() - t0;
+            try {
+              const data = JSON.parse(body);
+              if (ms > 1000) log('warn', 'slow upstream response', { url, ms, status: res.statusCode });
+              resolve({ status: res.statusCode, data });
+            } catch (e) {
+              log('error', 'upstream returned invalid JSON', { url, ms });
+              reject(new Error(`invalid JSON from ${url}`));
+            }
+          });
+        });
+
+        req.on('error', e => {
+          clearTimeout(timer);
+          log('error', 'upstream connection error', { url, error: e.message });
+          reject(e);
+        });
+      });
+    }
+
+    // ── HTTP server ───────────────────────────────────────────────────────────────
+    const server = http.createServer(async (req, res) => {
+      const t0 = Date.now();
+      res.setHeader('Content-Type', 'application/json');
+      res.setHeader('Access-Control-Allow-Origin', '*');
+
+      if (req.url === '/healthz') {
+        res.writeHead(200);
+        return res.end(JSON.stringify({ ok: true, service: 'tracker-api' }));
+      }
+
+      if (req.url === '/dashboard') {
+        const errors  = {};
+        const payload = {};
+
+        const [orbitResult, scheduleResult, qualityResult, receiverResult] = await Promise.allSettled([
+          fetchJson(`${ORBIT_ENGINE_URL}/positions`),
+          fetchJson(`${PASS_PLANNER_URL}/schedule`),
+          fetchJson(`${TELEMETRY_STORE_URL}/quality`),
+          fetchJson(`${SAT_RECEIVER_URL}/status`),
+        ]);
+
+        // orbit-engine
+        if (orbitResult.status === 'fulfilled') {
+          payload.positions = orbitResult.value.data.positions || [];
+          payload.station   = orbitResult.value.data.station;
+        } else {
+          errors.orbit      = orbitResult.reason.message;
+          payload.positions = [];
+          log('error', 'orbit-engine failed', { error: orbitResult.reason.message });
+        }
+
+        // pass-planner
+        if (scheduleResult.status === 'fulfilled') {
+          payload.schedule = scheduleResult.value.data.schedule?.slice(0, 8) || [];
+        } else {
+          errors.schedule  = scheduleResult.reason.message;
+          payload.schedule = [];
+          log('error', 'pass-planner failed', { error: scheduleResult.reason.message });
+        }
+
+        // telemetry-store
+        if (qualityResult.status === 'fulfilled') {
+          payload.telemetry = qualityResult.value.data;
+        } else {
+          errors.telemetry  = qualityResult.reason.message;
+          payload.telemetry = null;
+          log('error', 'telemetry-store failed', { error: qualityResult.reason.message });
+        }
+
+        // sat-receiver
+        if (receiverResult.status === 'fulfilled') {
+          payload.receiver = receiverResult.value.data;
+        } else {
+          errors.receiver  = receiverResult.reason.message;
+          payload.receiver = null;
+          log('warn', 'sat-receiver unavailable', { error: receiverResult.reason.message });
+        }
+
+        const ms       = Date.now() - t0;
+        const degraded = Object.keys(errors).length > 0;
+        const status   = degraded ? 207 : 200;
+
+        if (degraded) {
+          log('warn', 'degraded dashboard response', { errors, ms, status });
+        } else {
+          log('info', 'dashboard ok', { ms, satellites: payload.positions?.length ?? 0 });
+        }
+
+        res.writeHead(status);
+        return res.end(JSON.stringify({
+          ...payload,
+          meta: { responseTimeMs: ms, degraded, errors: degraded ? errors : undefined, timestamp: new Date().toISOString() },
+        }));
+      }
+
+      res.writeHead(404);
+      res.end(JSON.stringify({ error: 'Not found' }));
+    });
+
+    const PORT = process.env.PORT || 3005;
+    server.listen(PORT, () => log('info', 'listening', {
+      port: PORT,
+      upstreams: { orbitEngine: ORBIT_ENGINE_URL, passPlanner: PASS_PLANNER_URL, telemetryStore: TELEMETRY_STORE_URL, satReceiver: SAT_RECEIVER_URL },
+      timeoutMs: TIMEOUT_MS,
+    }));

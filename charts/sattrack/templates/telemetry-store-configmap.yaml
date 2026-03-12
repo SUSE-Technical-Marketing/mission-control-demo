@@ -1,0 +1,190 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Release.Name }}-telemetry-store-code
+  labels:
+    app.kubernetes.io/name: {{ .Chart.Name }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/component: telemetry-store
+    app.kubernetes.io/part-of: {{ .Chart.Name }}
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+data:
+  server.js: |
+    /**
+     * telemetry-store
+     *
+     * Stores telemetry frames pushed by sat-receiver and serves
+     * aggregated signal quality data to tracker-api.
+     *
+     * CACHE_ENABLED=true activates frame replay caching on the write path.
+     * The cache was introduced in v2.3 to speed up historical frame replay
+     * by retaining parsed frame representations after ingest. It has not yet
+     * had an eviction policy implemented.
+     *
+     * sat-receiver posts one frame every 1.5s. At 2MB per cached entry and a
+     * 128Mi container limit, the cache fills available memory in ~30 seconds.
+     */
+    'use strict';
+
+    const http = require('http');
+
+    const CACHE_ENABLED = process.env.CACHE_ENABLED === 'true';
+    const CACHE_CHUNK   = 2 * 1024 * 1024; // 2 MB per cache entry
+
+    // ── Structured logger ─────────────────────────────────────────────────────────
+    function log(level, msg, fields = {}) {
+      console.log(JSON.stringify({ ts: new Date().toISOString(), level, svc: 'telemetry-store', msg, ...fields }));
+    }
+
+    // ── Cache (the bug) ───────────────────────────────────────────────────────────
+    // Module-level array — GC can never collect entries once pushed.
+    const queryCache = [];
+
+    // Log a warning every N cache entries to make growth visible in logs
+    const CACHE_WARN_INTERVAL = 10;
+
+    function pushCache() {
+      const buf = Buffer.allocUnsafe(CACHE_CHUNK);
+      buf.fill(0xAB);
+      queryCache.push(buf);
+
+      if (queryCache.length % CACHE_WARN_INTERVAL === 0) {
+        const { heapUsed, heapTotal, rss } = process.memoryUsage();
+        const heapMb = Math.round(heapUsed / 1024 / 1024);
+        const rssMb  = Math.round(rss      / 1024 / 1024);
+
+        log('warn', 'frame cache growing — no eviction policy', {
+          cacheEntries: queryCache.length,
+          cacheMb:      Math.round((queryCache.length * CACHE_CHUNK) / 1024 / 1024),
+          heapMb,
+          rssMb,
+          hint: 'set CACHE_ENABLED=false to disable',
+        });
+      }
+    }
+
+    // ── Frame store (bounded — this part is fine) ─────────────────────────────────
+    const frameStore = {};
+    const MAX_FRAMES = 500;
+    let totalFramesReceived = 0;
+
+    function storeFrame(frame) {
+      const sat = frame.satellite;
+      if (!frameStore[sat]) frameStore[sat] = [];
+      frameStore[sat].unshift(frame);
+      if (frameStore[sat].length > MAX_FRAMES) frameStore[sat].pop();
+      totalFramesReceived++;
+    }
+
+    function getQuality(satellite) {
+      const frames = frameStore[satellite] || [];
+      if (frames.length === 0) return null;
+      const recent   = frames.slice(0, 50);
+      const avgSnr   = recent.reduce((s, f) => s + f.snrDb,       0) / recent.length;
+      const avgSig   = recent.reduce((s, f) => s + f.signalDbm,   0) / recent.length;
+      const errRate  = recent.reduce((s, f) => s + f.frameErrors, 0) / recent.length;
+      return {
+        satellite,
+        avgSnrDb:       parseFloat(avgSnr.toFixed(2)),
+        avgSignalDbm:   parseFloat(avgSig.toFixed(2)),
+        frameErrorRate: parseFloat((errRate / 100).toFixed(4)),
+        totalFrames:    frames.length,
+        lastFrame:      frames[0]?.timestamp || null,
+        quality:        avgSnr > 15 ? 'good' : avgSnr > 10 ? 'marginal' : 'poor',
+      };
+    }
+
+    // ── HTTP server ───────────────────────────────────────────────────────────────
+    const server = http.createServer((req, res) => {
+      const t0 = Date.now();
+      res.setHeader('Content-Type', 'application/json');
+      res.setHeader('Access-Control-Allow-Origin', '*');
+
+      const reply = (status, body) => {
+        res.writeHead(status);
+        res.end(JSON.stringify(body));
+      };
+
+      if (req.url === '/healthz') {
+        const { heapUsed, rss } = process.memoryUsage();
+        return reply(200, {
+          ok: true, service: 'telemetry-store', cacheEnabled: CACHE_ENABLED,
+          cacheEntries: queryCache.length,
+          heapMb: Math.round(heapUsed / 1024 / 1024),
+          rssMb:  Math.round(rss      / 1024 / 1024),
+        });
+      }
+
+      // POST /frames
+      if (req.method === 'POST' && req.url === '/frames') {
+        let body = '';
+        req.on('data', c => body += c);
+        req.on('end', () => {
+          try {
+            const frame = JSON.parse(body);
+            storeFrame(frame);
+
+            // ── THE BUG ─────────────────────────────────────────────────────────
+            if (CACHE_ENABLED) {
+              pushCache();
+            }
+
+            log('debug', 'frame stored', {
+              satellite:   frame.satellite,
+              seq:         frame.seqNumber,
+              snrDb:       frame.snrDb,
+              cacheEntries: queryCache.length,
+              ms:          Date.now() - t0,
+            });
+
+            return reply(201, { ok: true, stored: frame.frameId });
+          } catch (e) {
+            log('error', 'invalid frame payload', { error: e.message });
+            return reply(400, { error: 'Invalid frame JSON' });
+          }
+        });
+        return;
+      }
+
+      // GET /quality
+      if (req.url === '/quality') {
+        const satellites = Object.keys(frameStore);
+        const quality    = satellites.map(getQuality).filter(Boolean);
+        const { heapUsed, rss } = process.memoryUsage();
+        const heapMb = Math.round(heapUsed / 1024 / 1024);
+        const rssMb  = Math.round(rss      / 1024 / 1024);
+
+        log('info', 'quality read', {
+          satellites:   satellites.length,
+          totalFrames:  totalFramesReceived,
+          cacheEntries: queryCache.length,
+          heapMb,
+          rssMb,
+          ms:           Date.now() - t0,
+        });
+
+        return reply(200, {
+          quality, totalSatellites: satellites.length,
+          cacheEnabled: CACHE_ENABLED, timestamp: new Date().toISOString(),
+        });
+      }
+
+      // GET /frames/:satellite
+      if (req.url.startsWith('/frames/')) {
+        const satellite = decodeURIComponent(req.url.replace('/frames/', ''));
+        const frames    = (frameStore[satellite] || []).slice(0, 20);
+        return reply(200, { satellite, frames, count: frames.length });
+      }
+
+      return reply(404, { error: 'Not found' });
+    });
+
+    const PORT = process.env.PORT || 3003;
+    server.listen(PORT, () => {
+      log('info', 'listening', { port: PORT, cacheEnabled: CACHE_ENABLED, cacheChunkMb: CACHE_CHUNK / 1024 / 1024 });
+      if (CACHE_ENABLED) {
+        log('warn', 'frame replay cache is ENABLED — no eviction policy — memory will grow under ingest load');
+      } else {
+        log('info', 'frame replay cache is disabled');
+      }
+    });

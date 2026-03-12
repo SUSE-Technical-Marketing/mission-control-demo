@@ -1,0 +1,72 @@
+# ── SATTRACK Helm Values ───────────────────────────────────────────────────────
+#
+# The observability exercise is controlled by a single flag:
+#
+#   telemetryStore.cacheEnabled: true   ← default, triggers memory growth
+#   telemetryStore.cacheEnabled: false  ← fix
+#
+# With caching enabled and a 128Mi container limit, telemetry-store will be
+# OOMKilled in ~30 seconds under normal dashboard polling (every 2s).
+#
+# Exercise workflow:
+#   1. helm install sattrack ./helm/sattrack        ← cache on, system degrades
+#   2. Watch dashboard degrade in ~30s
+#   3. Use SUSE Observability to find root cause
+#   4. helm upgrade sattrack ./helm/sattrack --set telemetryStore.cacheEnabled=false
+# ─────────────────────────────────────────────────────────────────────────────
+
+orbitEngine:
+  port: 3001
+  # Total pass cycle in seconds. Divided equally across all 4 satellites so
+  # there is always one active. Default 300s = 5-minute cycle, 75s per satellite.
+  passCycleSecs: 300
+  memoryRequest: 32Mi
+  memoryLimit: 64Mi
+
+passPlanner:
+  port: 3002
+  upstreamTimeoutMs: 4000
+  memoryRequest: 32Mi
+  memoryLimit: 64Mi
+
+telemetryStore:
+  port: 3003
+  cacheEnabled: true        # ← set to false to resolve the memory issue
+  memoryRequest: 64Mi
+  memoryLimit: 128Mi        # tight limit ensures OOMKill at ~30s
+
+satReceiver:
+  port: 3004
+  frameIntervalMs: 1500     # one frame every 1.5s during a pass
+  upstreamTimeoutMs: 3000
+  memoryRequest: 32Mi
+  memoryLimit: 64Mi
+
+trackerApi:
+  port: 3005
+  upstreamTimeoutMs: 4000
+  memoryRequest: 32Mi
+  memoryLimit: 64Mi
+
+ui:
+  port: 80
+  memoryRequest: 16Mi
+  memoryLimit: 32Mi
+  exposeLoadBalancer: false
+
+k6:
+  # Requests per second sent to tracker-api /dashboard
+  # 2 RPS is enough to keep all topology edges warm in SUSE Observability
+  # without generating noise. Raise to 10+ to make latency degradation
+  # more dramatic during the memory leak exercise.
+  rps: 2
+
+ingress:
+  enabled: true
+  className: traefik
+  host: sattrack.example.com
+  tls:
+    enabled: true
+    secretName: wildcard-tls
+
+replicaCount: 1
