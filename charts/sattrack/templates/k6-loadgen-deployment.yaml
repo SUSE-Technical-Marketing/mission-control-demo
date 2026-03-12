@@ -33,7 +33,7 @@ spec:
             - /scripts/script.js
           env:
             - name: TARGET_URL
-              value: "http://{{ .Release.Name }}-tracker-api:{{ .Values.trackerApi.port }}"
+              value: "http://{{ .Release.Name }}-ui:{{ .Values.ui.port }}"
             - name: RPS
               value: {{ .Values.k6.rps | quote }}
           volumeMounts:
