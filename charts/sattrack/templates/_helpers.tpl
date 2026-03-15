@@ -19,8 +19,9 @@ app.kubernetes.io/managed-by: {{ .root.Release.Service }}
   Usage: {{ include "sattrack.selectorLabels" (dict "app" "orbit-engine" "root" .) }}
 */}}
 {{- define "sattrack.selectorLabels" -}}
-app: {{ .app }}
-release: {{ .root.Release.Name }}
+app.kubernetes.io/name: {{ .root.Chart.Name }}
+app.kubernetes.io/instance: {{ .root.Release.Name }}
+app.kubernetes.io/component: {{ .app }}
 {{- end }}
 
 {{/*
