@@ -3,11 +3,7 @@ kind: ConfigMap
 metadata:
   name: {{ .Release.Name }}-telemetry-store-code
   labels:
-    app.kubernetes.io/name: {{ .Chart.Name }}
-    app.kubernetes.io/instance: {{ .Release.Name }}
-    app.kubernetes.io/component: telemetry-store
-    app.kubernetes.io/part-of: {{ .Chart.Name }}
-    app.kubernetes.io/managed-by: {{ .Release.Service }}
+    {{- include "sattrack.labels" (dict "app" "telemetry-store" "root" .) | nindent 4 }}
 data:
   server.js: |
     /**
@@ -21,8 +17,9 @@ data:
      * by retaining parsed frame representations after ingest. It has not yet
      * had an eviction policy implemented.
      *
-     * sat-receiver posts one frame every 1.5s. At 2MB per cached entry and a
-     * 128Mi container limit, the cache fills available memory in ~30 seconds.
+     * sat-receiver posts one frame every 500ms. At 4MB per cached entry and a
+     * 256Mi container limit (node:20-alpine baseline ~130MB RSS), the cache
+     * fills the remaining ~126MB of headroom in ~16 seconds.
      */
     'use strict';
 
@@ -41,18 +38,21 @@ data:
     const queryCache = [];
 
     // Log a warning every N cache entries to make growth visible in logs
-    const CACHE_WARN_INTERVAL = 10;
+    const CACHE_WARN_INTERVAL = 5;
 
     function pushCache() {
+      // allocUnsafe + fill forces the kernel to commit real physical pages.
+      // Buffer.alloc(n, 0x00) maps to the shared zero page under Linux CoW —
+      // the OS never allocates physical RAM until a write occurs, so RSS stays
+      // flat even as the logical allocation grows into the GB range.
       const buf = Buffer.allocUnsafe(CACHE_CHUNK);
-      buf.fill(0xAB);
+      buf.fill(0xAB);   // non-zero pattern — defeats zero-page deduplication
       queryCache.push(buf);
 
       if (queryCache.length % CACHE_WARN_INTERVAL === 0) {
         const { heapUsed, heapTotal, rss } = process.memoryUsage();
         const heapMb = Math.round(heapUsed / 1024 / 1024);
         const rssMb  = Math.round(rss      / 1024 / 1024);
-
         log('warn', 'frame cache growing — no eviction policy', {
           cacheEntries: queryCache.length,
           cacheMb:      Math.round((queryCache.length * CACHE_CHUNK) / 1024 / 1024),
@@ -107,11 +107,13 @@ data:
 
       if (req.url === '/healthz') {
         const { heapUsed, rss } = process.memoryUsage();
+        const heapMb = Math.round(heapUsed / 1024 / 1024);
+        const rssMb  = Math.round(rss      / 1024 / 1024);
         return reply(200, {
           ok: true, service: 'telemetry-store', cacheEnabled: CACHE_ENABLED,
           cacheEntries: queryCache.length,
-          heapMb: Math.round(heapUsed / 1024 / 1024),
-          rssMb:  Math.round(rss      / 1024 / 1024),
+          heapMb,
+          rssMb,
         });
       }
 

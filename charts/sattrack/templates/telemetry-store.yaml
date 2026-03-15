@@ -1,0 +1,71 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Release.Name }}-telemetry-store
+  labels:
+    {{- include "sattrack.labels" (dict "app" "telemetry-store" "root" .) | nindent 4 }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "sattrack.selectorLabels" (dict "app" "telemetry-store" "root" .) | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "sattrack.selectorLabels" (dict "app" "telemetry-store" "root" .) | nindent 8 }}
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/telemetry-store-configmap.yaml") . | sha256sum }}
+    spec:
+      initContainers:
+        {{- include "sattrack.otelInitContainer" . | nindent 8 }}
+      containers:
+        - name: telemetry-store
+          image: node:20-alpine
+          command:
+            {{- include "sattrack.nodeCommand" . | nindent 12 }}
+          ports:
+            - containerPort: {{ .Values.telemetryStore.port }}
+          env:
+            - name: PORT
+              value: {{ .Values.telemetryStore.port | quote }}
+            - name: CACHE_ENABLED
+              value: {{ .Values.telemetryStore.cacheEnabled | quote }}
+            {{- include "sattrack.otelEnv" (dict "service" "telemetry-store" "root" .) | nindent 12 }}
+          volumeMounts:
+            - name: code
+              mountPath: /app/server.js
+              subPath: server.js
+            {{- include "sattrack.otelVolumeMounts" . | nindent 12 }}
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: {{ .Values.telemetryStore.port }}
+            initialDelaySeconds: 15
+            periodSeconds: 10
+          resources:
+            requests:
+              memory: {{ .Values.telemetryStore.memoryRequest }}
+              cpu: 20m
+            limits:
+              memory: {{ .Values.telemetryStore.memoryLimit }}
+              cpu: 200m
+      volumes:
+        - name: code
+          configMap:
+            name: {{ .Release.Name }}-telemetry-store-code
+        {{- include "sattrack.otelVolumes" . | nindent 8 }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Release.Name }}-telemetry-store
+  labels:
+    {{- include "sattrack.labels" (dict "app" "telemetry-store" "root" .) | nindent 4 }}
+spec:
+  type: ClusterIP
+  selector:
+    {{- include "sattrack.selectorLabels" (dict "app" "telemetry-store" "root" .) | nindent 4 }}
+  ports:
+    - port: {{ .Values.telemetryStore.port }}
+      targetPort: {{ .Values.telemetryStore.port }}
+      name: http

@@ -3,22 +3,31 @@ kind: ConfigMap
 metadata:
   name: {{ .Release.Name }}-tracker-api-code
   labels:
-    app.kubernetes.io/name: {{ .Chart.Name }}
-    app.kubernetes.io/instance: {{ .Release.Name }}
-    app.kubernetes.io/component: tracker-api
-    app.kubernetes.io/part-of: {{ .Chart.Name }}
-    app.kubernetes.io/managed-by: {{ .Release.Service }}
+    {{- include "sattrack.labels" (dict "app" "tracker-api" "root" .) | nindent 4 }}
 data:
   server.js: |
     /**
      * tracker-api
      *
      * Single backend for the sattrack-ui dashboard.
-     * Fan-out to orbit-engine, pass-planner, telemetry-store and sat-receiver
-     * in parallel. Pure aggregation — no business logic of its own.
+     * Exposes both a composite /dashboard endpoint and individual per-service
+     * endpoints so the UI (and k6) can call each upstream independently.
+     * This gives SUSE Observability distinct edges and accurate per-service
+     * error rates — when telemetry-store is down, GET /telemetry returns 500
+     * and that error rate is visible without being buried in a composite call.
      *
-     * Degraded responses use HTTP 207 so the UI can distinguish partial data
-     * from a total failure.
+     * Endpoints
+     * ─────────
+     *   GET /dashboard            fan-out to all upstreams, 200 or 207
+     *   GET /positions            orbit-engine positions  (200 / 502)
+     *   GET /schedule             pass-planner schedule   (200 / 502)
+     *   GET /telemetry            telemetry-store quality (200 / 500)
+     *   GET /receiver             sat-receiver status     (200 / 502)
+     *   GET /health/orbit         orbit-engine healthz    (200 / 500)
+     *   GET /health/planner       pass-planner healthz    (200 / 500)
+     *   GET /health/telemetry     telemetry-store healthz (200 / 500)
+     *   GET /health/receiver      sat-receiver healthz    (200 / 500)
+     *   GET /healthz              self health
      */
     'use strict';
 
@@ -52,15 +61,14 @@ data:
             const ms = Date.now() - t0;
             try {
               const data = JSON.parse(body);
-              if (ms > 1000) log('warn', 'slow upstream response', { url, ms, status: res.statusCode });
-              resolve({ status: res.statusCode, data });
+              if (ms > 1000) log('warn', 'slow upstream', { url, ms, status: res.statusCode });
+              resolve({ status: res.statusCode, data, ms });
             } catch (e) {
-              log('error', 'upstream returned invalid JSON', { url, ms });
+              log('error', 'upstream invalid JSON', { url, ms });
               reject(new Error(`invalid JSON from ${url}`));
             }
           });
         });
-
         req.on('error', e => {
           clearTimeout(timer);
           log('error', 'upstream connection error', { url, error: e.message });
@@ -69,17 +77,91 @@ data:
       });
     }
 
+    // Proxy a single upstream healthz — returns 200 if healthy, 500 if not
+    async function proxyHealth(res, url, name) {
+      try {
+        const result = await fetchJson(url);
+        const ok     = result.status === 200;
+        res.writeHead(ok ? 200 : 500);
+        res.end(JSON.stringify({ ok, service: name, upstream: result.data }));
+      } catch (err) {
+        log('error', `${name} health check failed`, { url, error: err.message });
+        res.writeHead(500);
+        res.end(JSON.stringify({ ok: false, service: name, error: err.message }));
+      }
+    }
+
     // ── HTTP server ───────────────────────────────────────────────────────────────
     const server = http.createServer(async (req, res) => {
       const t0 = Date.now();
       res.setHeader('Content-Type', 'application/json');
       res.setHeader('Access-Control-Allow-Origin', '*');
 
+      const reply = (status, body) => {
+        res.writeHead(status);
+        res.end(JSON.stringify(body));
+        if (!req.url.startsWith('/health') && req.url !== '/healthz') {
+          log(status >= 500 ? 'error' : status === 207 ? 'warn' : 'info',
+              'request', { method: req.method, path: req.url, status, ms: Date.now() - t0 });
+        }
+      };
+
+      // ── Self health ─────────────────────────────────────────────────────────────
       if (req.url === '/healthz') {
-        res.writeHead(200);
-        return res.end(JSON.stringify({ ok: true, service: 'tracker-api' }));
+        return reply(200, { ok: true, service: 'tracker-api' });
       }
 
+      // ── Per-service health proxies ──────────────────────────────────────────────
+      if (req.url === '/health/orbit')     return proxyHealth(res, `${ORBIT_ENGINE_URL}/healthz`,    'orbit-engine');
+      if (req.url === '/health/planner')   return proxyHealth(res, `${PASS_PLANNER_URL}/healthz`,    'pass-planner');
+      if (req.url === '/health/telemetry') return proxyHealth(res, `${TELEMETRY_STORE_URL}/healthz`, 'telemetry-store');
+      if (req.url === '/health/receiver')  return proxyHealth(res, `${SAT_RECEIVER_URL}/healthz`,    'sat-receiver');
+
+      // ── Individual data endpoints ───────────────────────────────────────────────
+
+      if (req.url === '/positions') {
+        try {
+          const result = await fetchJson(`${ORBIT_ENGINE_URL}/positions`);
+          return reply(200, result.data);
+        } catch (err) {
+          log('error', 'orbit-engine positions failed', { error: err.message });
+          return reply(502, { error: err.message, service: 'orbit-engine' });
+        }
+      }
+
+      if (req.url === '/schedule') {
+        try {
+          const result = await fetchJson(`${PASS_PLANNER_URL}/schedule`);
+          return reply(200, result.data);
+        } catch (err) {
+          log('error', 'pass-planner schedule failed', { error: err.message });
+          return reply(502, { error: err.message, service: 'pass-planner' });
+        }
+      }
+
+      // Returns 500 (not 502) when the store is down — this is the error rate
+      // signal we want to see spike in SUSE Observability during the exercise
+      if (req.url === '/telemetry') {
+        try {
+          const result = await fetchJson(`${TELEMETRY_STORE_URL}/quality`);
+          return reply(200, result.data);
+        } catch (err) {
+          log('error', 'telemetry-store quality failed', { error: err.message });
+          return reply(500, { error: err.message, service: 'telemetry-store' });
+        }
+      }
+
+      if (req.url === '/receiver') {
+        try {
+          const result = await fetchJson(`${SAT_RECEIVER_URL}/status`);
+          return reply(200, result.data);
+        } catch (err) {
+          log('warn', 'sat-receiver status failed', { error: err.message });
+          return reply(502, { error: err.message, service: 'sat-receiver' });
+        }
+      }
+
+      // ── Composite dashboard ─────────────────────────────────────────────────────
       if (req.url === '/dashboard') {
         const errors  = {};
         const payload = {};
@@ -91,7 +173,6 @@ data:
           fetchJson(`${SAT_RECEIVER_URL}/status`),
         ]);
 
-        // orbit-engine
         if (orbitResult.status === 'fulfilled') {
           payload.positions = orbitResult.value.data.positions || [];
           payload.station   = orbitResult.value.data.station;
@@ -101,7 +182,6 @@ data:
           log('error', 'orbit-engine failed', { error: orbitResult.reason.message });
         }
 
-        // pass-planner
         if (scheduleResult.status === 'fulfilled') {
           payload.schedule = scheduleResult.value.data.schedule?.slice(0, 8) || [];
         } else {
@@ -110,7 +190,6 @@ data:
           log('error', 'pass-planner failed', { error: scheduleResult.reason.message });
         }
 
-        // telemetry-store
         if (qualityResult.status === 'fulfilled') {
           payload.telemetry = qualityResult.value.data;
         } else {
@@ -119,7 +198,6 @@ data:
           log('error', 'telemetry-store failed', { error: qualityResult.reason.message });
         }
 
-        // sat-receiver
         if (receiverResult.status === 'fulfilled') {
           payload.receiver = receiverResult.value.data;
         } else {
@@ -130,28 +208,31 @@ data:
 
         const ms       = Date.now() - t0;
         const degraded = Object.keys(errors).length > 0;
-        const status   = degraded ? 207 : 200;
 
         if (degraded) {
-          log('warn', 'degraded dashboard response', { errors, ms, status });
+          log('warn', 'degraded dashboard response', { errors, ms });
         } else {
           log('info', 'dashboard ok', { ms, satellites: payload.positions?.length ?? 0 });
         }
 
-        res.writeHead(status);
-        return res.end(JSON.stringify({
+        return reply(degraded ? 207 : 200, {
           ...payload,
           meta: { responseTimeMs: ms, degraded, errors: degraded ? errors : undefined, timestamp: new Date().toISOString() },
-        }));
+        });
       }
 
-      res.writeHead(404);
-      res.end(JSON.stringify({ error: 'Not found' }));
+      return reply(404, { error: 'Not found' });
     });
 
     const PORT = process.env.PORT || 3005;
     server.listen(PORT, () => log('info', 'listening', {
       port: PORT,
-      upstreams: { orbitEngine: ORBIT_ENGINE_URL, passPlanner: PASS_PLANNER_URL, telemetryStore: TELEMETRY_STORE_URL, satReceiver: SAT_RECEIVER_URL },
-      timeoutMs: TIMEOUT_MS,
+      endpoints: ['/dashboard', '/positions', '/schedule', '/telemetry', '/receiver',
+                  '/health/orbit', '/health/planner', '/health/telemetry', '/health/receiver'],
+      upstreams: {
+        orbitEngine:    ORBIT_ENGINE_URL,
+        passPlanner:    PASS_PLANNER_URL,
+        telemetryStore: TELEMETRY_STORE_URL,
+        satReceiver:    SAT_RECEIVER_URL,
+      },
     }));

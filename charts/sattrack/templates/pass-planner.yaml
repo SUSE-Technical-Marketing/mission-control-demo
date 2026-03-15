@@ -1,0 +1,73 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Release.Name }}-pass-planner
+  labels:
+    {{- include "sattrack.labels" (dict "app" "pass-planner" "root" .) | nindent 4 }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "sattrack.selectorLabels" (dict "app" "pass-planner" "root" .) | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "sattrack.selectorLabels" (dict "app" "pass-planner" "root" .) | nindent 8 }}
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/pass-planner-configmap.yaml") . | sha256sum }}
+    spec:
+      initContainers:
+        {{- include "sattrack.otelInitContainer" . | nindent 8 }}
+      containers:
+        - name: pass-planner
+          image: node:20-alpine
+          command:
+            {{- include "sattrack.nodeCommand" . | nindent 12 }}
+          ports:
+            - containerPort: {{ .Values.passPlanner.port }}
+          env:
+            - name: PORT
+              value: {{ .Values.passPlanner.port | quote }}
+            - name: ORBIT_ENGINE_URL
+              value: "http://{{ .Release.Name }}-orbit-engine:{{ .Values.orbitEngine.port }}"
+            - name: UPSTREAM_TIMEOUT_MS
+              value: {{ .Values.passPlanner.upstreamTimeoutMs | quote }}
+            {{- include "sattrack.otelEnv" (dict "service" "pass-planner" "root" .) | nindent 12 }}
+          volumeMounts:
+            - name: code
+              mountPath: /app/server.js
+              subPath: server.js
+            {{- include "sattrack.otelVolumeMounts" . | nindent 12 }}
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: {{ .Values.passPlanner.port }}
+            initialDelaySeconds: 15
+            periodSeconds: 10
+          resources:
+            requests:
+              memory: {{ .Values.passPlanner.memoryRequest }}
+              cpu: 20m
+            limits:
+              memory: {{ .Values.passPlanner.memoryLimit }}
+              cpu: 100m
+      volumes:
+        - name: code
+          configMap:
+            name: {{ .Release.Name }}-pass-planner-code
+        {{- include "sattrack.otelVolumes" . | nindent 8 }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Release.Name }}-pass-planner
+  labels:
+    {{- include "sattrack.labels" (dict "app" "pass-planner" "root" .) | nindent 4 }}
+spec:
+  type: ClusterIP
+  selector:
+    {{- include "sattrack.selectorLabels" (dict "app" "pass-planner" "root" .) | nindent 4 }}
+  ports:
+    - port: {{ .Values.passPlanner.port }}
+      targetPort: {{ .Values.passPlanner.port }}
+      name: http

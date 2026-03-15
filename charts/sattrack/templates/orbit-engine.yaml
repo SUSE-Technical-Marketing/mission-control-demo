@@ -1,0 +1,71 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Release.Name }}-orbit-engine
+  labels:
+    {{- include "sattrack.labels" (dict "app" "orbit-engine" "root" .) | nindent 4 }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "sattrack.selectorLabels" (dict "app" "orbit-engine" "root" .) | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "sattrack.selectorLabels" (dict "app" "orbit-engine" "root" .) | nindent 8 }}
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/orbit-engine-configmap.yaml") . | sha256sum }}
+    spec:
+      initContainers:
+        {{- include "sattrack.otelInitContainer" . | nindent 8 }}
+      containers:
+        - name: orbit-engine
+          image: node:20-alpine
+          command:
+            {{- include "sattrack.nodeCommand" . | nindent 12 }}
+          ports:
+            - containerPort: {{ .Values.orbitEngine.port }}
+          env:
+            - name: PORT
+              value: {{ .Values.orbitEngine.port | quote }}
+            - name: PASS_CYCLE_SECS
+              value: {{ .Values.orbitEngine.passCycleSecs | quote }}
+            {{- include "sattrack.otelEnv" (dict "service" "orbit-engine" "root" .) | nindent 12 }}
+          volumeMounts:
+            - name: code
+              mountPath: /app/server.js
+              subPath: server.js
+            {{- include "sattrack.otelVolumeMounts" . | nindent 12 }}
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: {{ .Values.orbitEngine.port }}
+            initialDelaySeconds: 15
+            periodSeconds: 10
+          resources:
+            requests:
+              memory: {{ .Values.orbitEngine.memoryRequest }}
+              cpu: 20m
+            limits:
+              memory: {{ .Values.orbitEngine.memoryLimit }}
+              cpu: 100m
+      volumes:
+        - name: code
+          configMap:
+            name: {{ .Release.Name }}-orbit-engine-code
+        {{- include "sattrack.otelVolumes" . | nindent 8 }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Release.Name }}-orbit-engine
+  labels:
+    {{- include "sattrack.labels" (dict "app" "orbit-engine" "root" .) | nindent 4 }}
+spec:
+  type: ClusterIP
+  selector:
+    {{- include "sattrack.selectorLabels" (dict "app" "orbit-engine" "root" .) | nindent 4 }}
+  ports:
+    - port: {{ .Values.orbitEngine.port }}
+      targetPort: {{ .Values.orbitEngine.port }}
+      name: http

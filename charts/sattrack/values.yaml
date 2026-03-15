@@ -33,11 +33,11 @@ telemetryStore:
   port: 3003
   cacheEnabled: true        # ← set to false to resolve the memory issue
   memoryRequest: 64Mi
-  memoryLimit: 128Mi        # tight limit ensures OOMKill at ~30s
+  memoryLimit: 128Mi        # at 2MB/frame × 0.67 frames/s → OOMKill in ~95s
 
 satReceiver:
   port: 3004
-  frameIntervalMs: 1500     # one frame every 1.5s during a pass
+  frameIntervalMs: 5000     # one frame every 5s → 2MB every 5s → fills 126MB headroom in ~5 min
   upstreamTimeoutMs: 3000
   memoryRequest: 32Mi
   memoryLimit: 64Mi
@@ -48,7 +48,7 @@ trackerApi:
   memoryRequest: 32Mi
   memoryLimit: 64Mi
 
-ui:
+sattrackUi:
   port: 80
   memoryRequest: 16Mi
   memoryLimit: 32Mi
@@ -60,6 +60,13 @@ k6:
   # without generating noise. Raise to 10+ to make latency degradation
   # more dramatic during the memory leak exercise.
   rps: 2
+
+otel:
+  # OTLP HTTP endpoint for trace export.
+  # Set to your SUSE Observability (or any OTel-compatible) collector.
+  # Example: http://suse-observability-otel-collector:4318
+  # Leave empty to disable tracing (services start normally without it).
+  endpoint: ""
 
 ingress:
   enabled: true

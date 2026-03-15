@@ -1,27 +1,25 @@
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: {{ .Release.Name }}-ui-code
+  name: {{ .Release.Name }}-sattrack-ui-code
   labels:
-    app.kubernetes.io/name: {{ .Chart.Name }}
-    app.kubernetes.io/instance: {{ .Release.Name }}
-    app.kubernetes.io/component: ui
-    app.kubernetes.io/part-of: {{ .Chart.Name }}
-    app.kubernetes.io/managed-by: {{ .Release.Service }}
+    {{- include "sattrack.labels" (dict "app" "sattrack-ui" "root" .) | nindent 4 }}
 data:
   nginx.conf: |
     server {
       listen 80;
       root /usr/share/nginx/html;
       index index.html;
-
+      # All /api/* requests proxy to tracker-api (strips /api prefix).
+      # Covers /api/dashboard, /api/positions, /api/schedule,
+      # /api/telemetry, /api/receiver, and /api/health/*.
       location /api/ {
         proxy_pass http://{{ .Release.Name }}-tracker-api:{{ .Values.trackerApi.port }}/;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_read_timeout 10s;
       }
-
       location / {
         try_files $uri $uri/ /index.html;
       }
@@ -678,16 +676,15 @@ data:
         : 'no active pass';
     }
 
-    // ── Main poll ─────────────────────────────────────────────────
+    // ── Chip / banner helpers ─────────────────────────────────
     function setChip(id, state, label) {
       const el = document.getElementById(id);
       el.className = 'chip ' + state;
       el.textContent = label;
     }
 
-    // ── Banner helpers ────────────────────────────────────────────
     const banner = document.getElementById('deg-banner');
-    const DEFAULT_BANNER_TEXT = '⚠ &nbsp; DEGRADED — ONE OR MORE UPSTREAM SERVICES UNAVAILABLE — DATA MAY BE INCOMPLETE';
+    const DEFAULT_BANNER_TEXT = '⚠   DEGRADED — ONE OR MORE UPSTREAM SERVICES UNAVAILABLE — DATA MAY BE INCOMPLETE';
 
     function showBanner(text) {
       banner.innerHTML = text || DEFAULT_BANNER_TEXT;
@@ -699,25 +696,61 @@ data:
       banner.innerHTML = DEFAULT_BANNER_TEXT;
     }
 
-    // ── API-down state — tracks consecutive failures ───────────────
+    // ── API-down state ────────────────────────────────────────
     let apiDownCount = 0;
 
     function setApiDown(ms) {
       apiDownCount++;
-      setChip('chip-api',      'err',  'API DOWN');
-      setChip('chip-orbit',    'err',  'ORBIT —');
-      setChip('chip-planner',  'err',  'PLANNER —');
-      setChip('chip-telemetry','err',  'TELEMETRY —');
-      setChip('chip-receiver', 'err',  'RECEIVER —');
+      setChip('chip-api', 'err', 'API DOWN');
       document.getElementById('metric-latency').textContent = ms + 'ms';
       document.getElementById('metric-latency').className   = 'metric-value err';
-      showBanner(`⚠ &nbsp; TRACKER-API UNREACHABLE — ALL DATA STALE (${apiDownCount} consecutive failure${apiDownCount > 1 ? 's' : ''})`);
+      showBanner(`⚠   TRACKER-API UNREACHABLE — ALL DATA STALE (${apiDownCount} consecutive failure${apiDownCount > 1 ? 's' : ''})`);
     }
 
     function setApiUp() {
       apiDownCount = 0;
     }
 
+    // ── Health poll — one fetch per service, drives the top-bar chips ─────────────
+    // Each call maps to a distinct edge in SUSE Observability.
+    // /api/health/telemetry returns 500 when telemetry-store is OOMKilled,
+    // which shows up as an error rate spike on that specific endpoint.
+    const HEALTH_POLL_MS = 10000;
+
+    const HEALTH_CHECKS = [
+      { url: '/api/health/orbit',     chip: 'chip-orbit',     ok: 'ORBIT OK',     err: 'ORBIT ERR'     },
+      { url: '/api/health/planner',   chip: 'chip-planner',   ok: 'PLANNER OK',   err: 'PLANNER ERR'   },
+      { url: '/api/health/telemetry', chip: 'chip-telemetry', ok: 'TELEMETRY OK', err: 'TELEMETRY ERR' },
+      { url: '/api/health/receiver',  chip: 'chip-receiver',  ok: 'RECEIVER OK',  err: 'RECEIVER WARN' },
+    ];
+
+    async function pollHealth() {
+      await Promise.allSettled(HEALTH_CHECKS.map(async ({ url, chip, ok, err }) => {
+        try {
+          const res = await fetch(url);
+          setChip(chip, res.ok ? 'ok' : 'err', res.ok ? ok : err);
+        } catch (_) {
+          setChip(chip, 'err', err);
+        }
+      }));
+    }
+
+    // ── Telemetry poll — separate fetch so the browser generates its own edge ─────
+    // Runs at the same cadence as the dashboard poll.
+    // Returns 500 when telemetry-store is down, making the error rate visible
+    // from the browser's perspective in SUSE Observability, not just from k6.
+    async function pollTelemetry() {
+      try {
+        const res  = await fetch('/api/telemetry');
+        const data = await res.json();
+        renderTelemetry(res.ok ? data : null);
+      } catch (_) {
+        renderTelemetry(null);
+      }
+    }
+
+    // ── Dashboard poll — positions, schedule, receiver ────────────────────────────
+    // Telemetry is intentionally excluded — pollTelemetry() owns that panel.
     async function poll() {
       const t0 = Date.now();
       try {
@@ -725,47 +758,37 @@ data:
         const data = await res.json();
         const ms   = Date.now() - t0;
 
-        // API is reachable — clear any previous down state
         setApiUp();
-
         document.getElementById('last-poll').textContent = 'last poll: ' + utcTime();
 
-        const errors   = data.meta?.errors || {};
         const degraded = data.meta?.degraded || false;
+        if (degraded) { showBanner(); } else { hideBanner(); }
 
-        if (degraded) {
-          showBanner();
-        } else {
-          hideBanner();
-        }
+        setChip('chip-api', ms > 2000 ? 'warn' : 'ok', `API ${ms}ms`);
 
-        // Chips — always written on every successful poll
-        setChip('chip-api',      ms > 2000 ? 'warn' : 'ok', `API ${ms}ms`);
-        setChip('chip-orbit',    errors.orbit     ? 'err' : 'ok', errors.orbit     ? 'ORBIT ERR'    : 'ORBIT OK');
-        setChip('chip-planner',  errors.schedule  ? 'err' : 'ok', errors.schedule  ? 'PLANNER ERR'  : 'PLANNER OK');
-        setChip('chip-telemetry',errors.telemetry ? 'err' : 'ok', errors.telemetry ? 'TELEMETRY ERR': 'TELEMETRY OK');
-        setChip('chip-receiver', errors.receiver  ? 'warn': 'ok', errors.receiver  ? 'RECEIVER WARN': 'RECEIVER OK');
-
-        // Latency metric
         const latEl = document.getElementById('metric-latency');
         latEl.textContent = ms + 'ms';
         latEl.className   = `metric-value ${ms > 2000 ? 'err' : ms > 800 ? 'warn' : 'ok'}`;
 
-        // Panels
         if (data.positions?.length) { drawMap(data.positions); renderSats(data.positions); }
         renderPasses(data.schedule);
-        renderTelemetry(data.telemetry);
         renderReceiver(data.receiver);
+        // Telemetry panel owned by pollTelemetry()
 
       } catch (err) {
-        console.error('Error fetching dashboard data:', err);
         setApiDown(Date.now() - t0);
       }
     }
 
     resizeCanvas();
+
     poll();
-    setInterval(poll, POLL_MS);
+    pollHealth();
+    pollTelemetry();
+
+    setInterval(poll,          POLL_MS);
+    setInterval(pollHealth,    HEALTH_POLL_MS);
+    setInterval(pollTelemetry, POLL_MS);
     </script>
     </body>
     </html>

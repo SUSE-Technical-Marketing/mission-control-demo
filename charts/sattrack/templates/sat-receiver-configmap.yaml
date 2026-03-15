@@ -3,11 +3,7 @@ kind: ConfigMap
 metadata:
   name: {{ .Release.Name }}-sat-receiver-code
   labels:
-    app.kubernetes.io/name: {{ .Chart.Name }}
-    app.kubernetes.io/instance: {{ .Release.Name }}
-    app.kubernetes.io/component: sat-receiver
-    app.kubernetes.io/part-of: {{ .Chart.Name }}
-    app.kubernetes.io/managed-by: {{ .Release.Service }}
+    {{- include "sattrack.labels" (dict "app" "sat-receiver" "root" .) | nindent 4 }}
 data:
   server.js: |
     /**

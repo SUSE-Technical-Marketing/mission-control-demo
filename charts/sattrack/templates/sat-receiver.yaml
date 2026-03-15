@@ -1,0 +1,77 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Release.Name }}-sat-receiver
+  labels:
+    {{- include "sattrack.labels" (dict "app" "sat-receiver" "root" .) | nindent 4 }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "sattrack.selectorLabels" (dict "app" "sat-receiver" "root" .) | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "sattrack.selectorLabels" (dict "app" "sat-receiver" "root" .) | nindent 8 }}
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/sat-receiver-configmap.yaml") . | sha256sum }}
+    spec:
+      initContainers:
+        {{- include "sattrack.otelInitContainer" . | nindent 8 }}
+      containers:
+        - name: sat-receiver
+          image: node:20-alpine
+          command:
+            {{- include "sattrack.nodeCommand" . | nindent 12 }}
+          ports:
+            - containerPort: {{ .Values.satReceiver.port }}
+          env:
+            - name: PORT
+              value: {{ .Values.satReceiver.port | quote }}
+            - name: PASS_PLANNER_URL
+              value: "http://{{ .Release.Name }}-pass-planner:{{ .Values.passPlanner.port }}"
+            - name: TELEMETRY_STORE_URL
+              value: "http://{{ .Release.Name }}-telemetry-store:{{ .Values.telemetryStore.port }}"
+            - name: FRAME_INTERVAL_MS
+              value: {{ .Values.satReceiver.frameIntervalMs | quote }}
+            - name: UPSTREAM_TIMEOUT_MS
+              value: {{ .Values.satReceiver.upstreamTimeoutMs | quote }}
+            {{- include "sattrack.otelEnv" (dict "service" "sat-receiver" "root" .) | nindent 12 }}
+          volumeMounts:
+            - name: code
+              mountPath: /app/server.js
+              subPath: server.js
+            {{- include "sattrack.otelVolumeMounts" . | nindent 12 }}
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: {{ .Values.satReceiver.port }}
+            initialDelaySeconds: 15
+            periodSeconds: 10
+          resources:
+            requests:
+              memory: {{ .Values.satReceiver.memoryRequest }}
+              cpu: 20m
+            limits:
+              memory: {{ .Values.satReceiver.memoryLimit }}
+              cpu: 100m
+      volumes:
+        - name: code
+          configMap:
+            name: {{ .Release.Name }}-sat-receiver-code
+        {{- include "sattrack.otelVolumes" . | nindent 8 }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Release.Name }}-sat-receiver
+  labels:
+    {{- include "sattrack.labels" (dict "app" "sat-receiver" "root" .) | nindent 4 }}
+spec:
+  type: ClusterIP
+  selector:
+    {{- include "sattrack.selectorLabels" (dict "app" "sat-receiver" "root" .) | nindent 4 }}
+  ports:
+    - port: {{ .Values.satReceiver.port }}
+      targetPort: {{ .Values.satReceiver.port }}
+      name: http
