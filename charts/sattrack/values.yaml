@@ -31,7 +31,23 @@ passPlanner:
 
 telemetryStore:
   port: 3003
-  cacheEnabled: true        # ← set to false to resolve the memory issue
+  # ── Exercise 1: memory leak ───────────────────────────────────────────────
+  # Frame replay cache with no eviction policy. Grows at ~0.4MB/s under
+  # normal ingest → OOMKill in ~5 minutes.
+  # Fix: set to false
+  cacheEnabled: true
+
+  # ── Exercise 2: latency ───────────────────────────────────────────────────
+  # Deep frame validation — CPU-bound multi-pass signal anomaly check.
+  # Blocks the Node.js event loop for ~400ms per frame, causing /quality
+  # reads to queue behind ingest and cascade latency up through tracker-api
+  # to the UI. Pod stays healthy; no errors; only latency metrics reveal it.
+  # Fix: set to false
+  frameValidation: false
+  # Cost per frame validation in ms. At 3500ms with a 5s frame interval,
+  # the event loop is blocked 70% of the time — /quality reads experience
+  # p90 ~3s, p99 ~3.5s. No backlog since cost < interval.
+  # frameValidationCostMs: 3500
   memoryRequest: 64Mi
   memoryLimit: 128Mi        # at 2MB/frame × 0.67 frames/s → OOMKill in ~95s
 

@@ -30,6 +30,8 @@ spec:
               value: {{ .Values.telemetryStore.port | quote }}
             - name: CACHE_ENABLED
               value: {{ .Values.telemetryStore.cacheEnabled | quote }}
+            - name: FRAME_VALIDATION_ENABLED
+              value: {{ .Values.telemetryStore.frameValidation | quote }}
             {{- include "sattrack.otelEnv" (dict "service" "telemetry-store" "root" .) | nindent 12 }}
           volumeMounts:
             - name: code

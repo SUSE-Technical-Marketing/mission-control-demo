@@ -12,58 +12,96 @@ data:
      * Stores telemetry frames pushed by sat-receiver and serves
      * aggregated signal quality data to tracker-api.
      *
+     * ── Exercise 1: Memory leak (CACHE_ENABLED) ───────────────────────────────────
      * CACHE_ENABLED=true activates frame replay caching on the write path.
      * The cache was introduced in v2.3 to speed up historical frame replay
      * by retaining parsed frame representations after ingest. It has not yet
      * had an eviction policy implemented.
      *
-     * sat-receiver posts one frame every 500ms. At 4MB per cached entry and a
-     * 256Mi container limit (node:20-alpine baseline ~130MB RSS), the cache
-     * fills the remaining ~126MB of headroom in ~16 seconds.
+     * sat-receiver posts one frame every 5s. At 2MB per cached entry and a
+     * 256Mi container limit (node:20-alpine baseline ~130MB RSS, ~126MB headroom):
+     *   1 frame/5s × 2MB = ~0.4MB/sec → OOMKill in ~5 minutes
+     *
+     * Fix: set CACHE_ENABLED=false
+     *
+     * ── Exercise 2: Latency (FRAME_VALIDATION_ENABLED) ───────────────────────────
+     * FRAME_VALIDATION_ENABLED=true activates deep frame validation on the write
+     * path. Introduced in v2.5 to catch anomalous telemetry before it pollutes
+     * the quality baseline. The validation routine performs a CPU-bound multi-pass
+     * analysis against rolling signal history and has not been profiled under load.
+     *
+     * At 3500ms cost with a 5s frame interval, the event loop is blocked 70%
+     * of the time. /quality reads issued by tracker-api during a validation pass
+     * queue behind the running validation and wait up to 3500ms for a response.
+     * Expected: p90 ~3s, p99 ~3.5s — reliably above typical alert thresholds.
+     * The pod stays healthy with flat memory and no errors in the logs.
+     *
+     * Fix: set FRAME_VALIDATION_ENABLED=false
      */
     'use strict';
 
     const http = require('http');
 
-    const CACHE_ENABLED = process.env.CACHE_ENABLED === 'true';
-    const CACHE_CHUNK   = 2 * 1024 * 1024; // 2 MB per cache entry
+    const CACHE_ENABLED            = process.env.CACHE_ENABLED             === 'true';
+    const FRAME_VALIDATION_ENABLED = process.env.FRAME_VALIDATION_ENABLED  === 'true';
+    const VALIDATION_COST_MS       = parseInt(process.env.VALIDATION_COST_MS || '3500');
+    const CACHE_CHUNK              = 2 * 1024 * 1024; // 2 MB per cache entry
 
     // ── Structured logger ─────────────────────────────────────────────────────────
     function log(level, msg, fields = {}) {
       console.log(JSON.stringify({ ts: new Date().toISOString(), level, svc: 'telemetry-store', msg, ...fields }));
     }
 
-    // ── Cache (the bug) ───────────────────────────────────────────────────────────
-    // Module-level array — GC can never collect entries once pushed.
+    // ── Exercise 1: frame replay cache (no eviction) ──────────────────────────────
     const queryCache = [];
-
-    // Log a warning every N cache entries to make growth visible in logs
-    const CACHE_WARN_INTERVAL = 5;
+    const CACHE_WARN_INTERVAL = 10;
 
     function pushCache() {
-      // allocUnsafe + fill forces the kernel to commit real physical pages.
-      // Buffer.alloc(n, 0x00) maps to the shared zero page under Linux CoW —
-      // the OS never allocates physical RAM until a write occurs, so RSS stays
-      // flat even as the logical allocation grows into the GB range.
       const buf = Buffer.allocUnsafe(CACHE_CHUNK);
-      buf.fill(0xAB);   // non-zero pattern — defeats zero-page deduplication
+      buf.fill(0xAB); // non-zero pattern — defeats OS zero-page deduplication
       queryCache.push(buf);
-
+      const { heapUsed, rss } = process.memoryUsage();
       if (queryCache.length % CACHE_WARN_INTERVAL === 0) {
-        const { heapUsed, heapTotal, rss } = process.memoryUsage();
-        const heapMb = Math.round(heapUsed / 1024 / 1024);
-        const rssMb  = Math.round(rss      / 1024 / 1024);
         log('warn', 'frame cache growing — no eviction policy', {
           cacheEntries: queryCache.length,
           cacheMb:      Math.round((queryCache.length * CACHE_CHUNK) / 1024 / 1024),
-          heapMb,
-          rssMb,
-          hint: 'set CACHE_ENABLED=false to disable',
+          heapMb:       Math.round(heapUsed / 1024 / 1024),
+          rssMb:        Math.round(rss      / 1024 / 1024),
+          hint:         'set CACHE_ENABLED=false to disable',
         });
       }
     }
 
-    // ── Frame store (bounded — this part is fine) ─────────────────────────────────
+    // ── Exercise 2: deep frame validation (CPU-bound, blocks event loop) ──────────
+    // Simulates a multi-pass signal anomaly check against rolling history.
+    // The busy-wait is intentional — it blocks the event loop the same way
+    // a real CPU-bound computation would, making it visible in latency metrics
+    // and traces rather than just in CPU usage graphs.
+    function validateFrame(frame) {
+      const deadline = Date.now() + VALIDATION_COST_MS;
+
+      // Pass 1 — SNR baseline cross-check (simulated)
+      let acc = 0;
+      while (Date.now() < deadline * 0.4) {
+        acc += Math.sin(acc + frame.snrDb) * Math.cos(acc);
+      }
+
+      // Pass 2 — attitude anomaly detection (simulated)
+      while (Date.now() < deadline * 0.7) {
+        acc += Math.sqrt(Math.abs(acc + frame.attitude?.roll ?? 0));
+      }
+
+      // Pass 3 — historical baseline comparison (simulated)
+      while (Date.now() < deadline) {
+        acc += Math.log1p(Math.abs(acc));
+      }
+
+      // Result is discarded — validation only raises an exception on anomaly
+      // (no anomalies in the simulation, so it always passes)
+      return { valid: true, passesRun: 3, durationMs: VALIDATION_COST_MS };
+    }
+
+    // ── Frame store (bounded — healthy) ──────────────────────────────────────────
     const frameStore = {};
     const MAX_FRAMES = 500;
     let totalFramesReceived = 0;
@@ -79,10 +117,10 @@ data:
     function getQuality(satellite) {
       const frames = frameStore[satellite] || [];
       if (frames.length === 0) return null;
-      const recent   = frames.slice(0, 50);
-      const avgSnr   = recent.reduce((s, f) => s + f.snrDb,       0) / recent.length;
-      const avgSig   = recent.reduce((s, f) => s + f.signalDbm,   0) / recent.length;
-      const errRate  = recent.reduce((s, f) => s + f.frameErrors, 0) / recent.length;
+      const recent  = frames.slice(0, 50);
+      const avgSnr  = recent.reduce((s, f) => s + f.snrDb,       0) / recent.length;
+      const avgSig  = recent.reduce((s, f) => s + f.signalDbm,   0) / recent.length;
+      const errRate = recent.reduce((s, f) => s + f.frameErrors, 0) / recent.length;
       return {
         satellite,
         avgSnrDb:       parseFloat(avgSnr.toFixed(2)),
@@ -107,13 +145,14 @@ data:
 
       if (req.url === '/healthz') {
         const { heapUsed, rss } = process.memoryUsage();
-        const heapMb = Math.round(heapUsed / 1024 / 1024);
-        const rssMb  = Math.round(rss      / 1024 / 1024);
         return reply(200, {
-          ok: true, service: 'telemetry-store', cacheEnabled: CACHE_ENABLED,
-          cacheEntries: queryCache.length,
-          heapMb,
-          rssMb,
+          ok:                     true,
+          service:                'telemetry-store',
+          cacheEnabled:           CACHE_ENABLED,
+          frameValidationEnabled: FRAME_VALIDATION_ENABLED,
+          cacheEntries:           queryCache.length,
+          heapMb:                 Math.round(heapUsed / 1024 / 1024),
+          rssMb:                  Math.round(rss      / 1024 / 1024),
         });
       }
 
@@ -126,17 +165,32 @@ data:
             const frame = JSON.parse(body);
             storeFrame(frame);
 
-            // ── THE BUG ─────────────────────────────────────────────────────────
+            // Exercise 1: cache leak
             if (CACHE_ENABLED) {
               pushCache();
             }
 
+            // Exercise 2: deep validation — CPU-bound, blocks event loop
+            let validationResult = null;
+            if (FRAME_VALIDATION_ENABLED) {
+              validationResult = validateFrame(frame);
+              if (validationResult.durationMs > 200) {
+                log('warn', 'frame validation slow', {
+                  satellite:    frame.satellite,
+                  seq:          frame.seqNumber,
+                  durationMs:   validationResult.durationMs,
+                  hint:         'set FRAME_VALIDATION_ENABLED=false to disable',
+                });
+              }
+            }
+
             log('debug', 'frame stored', {
-              satellite:   frame.satellite,
-              seq:         frame.seqNumber,
-              snrDb:       frame.snrDb,
+              satellite:    frame.satellite,
+              seq:          frame.seqNumber,
+              snrDb:        frame.snrDb,
               cacheEntries: queryCache.length,
-              ms:          Date.now() - t0,
+              validationMs: validationResult?.durationMs ?? null,
+              ms:           Date.now() - t0,
             });
 
             return reply(201, { ok: true, stored: frame.frameId });
@@ -153,21 +207,22 @@ data:
         const satellites = Object.keys(frameStore);
         const quality    = satellites.map(getQuality).filter(Boolean);
         const { heapUsed, rss } = process.memoryUsage();
-        const heapMb = Math.round(heapUsed / 1024 / 1024);
-        const rssMb  = Math.round(rss      / 1024 / 1024);
 
         log('info', 'quality read', {
           satellites:   satellites.length,
           totalFrames:  totalFramesReceived,
           cacheEntries: queryCache.length,
-          heapMb,
-          rssMb,
+          heapMb:       Math.round(heapUsed / 1024 / 1024),
+          rssMb:        Math.round(rss      / 1024 / 1024),
           ms:           Date.now() - t0,
         });
 
         return reply(200, {
-          quality, totalSatellites: satellites.length,
-          cacheEnabled: CACHE_ENABLED, timestamp: new Date().toISOString(),
+          quality,
+          totalSatellites:        satellites.length,
+          cacheEnabled:           CACHE_ENABLED,
+          frameValidationEnabled: FRAME_VALIDATION_ENABLED,
+          timestamp:              new Date().toISOString(),
         });
       }
 
@@ -183,10 +238,16 @@ data:
 
     const PORT = process.env.PORT || 3003;
     server.listen(PORT, () => {
-      log('info', 'listening', { port: PORT, cacheEnabled: CACHE_ENABLED, cacheChunkMb: CACHE_CHUNK / 1024 / 1024 });
+      log('info', 'listening', {
+        port:                   PORT,
+        cacheEnabled:           CACHE_ENABLED,
+        frameValidationEnabled: FRAME_VALIDATION_ENABLED,
+        validationCostMs:       FRAME_VALIDATION_ENABLED ? VALIDATION_COST_MS : null,
+      });
       if (CACHE_ENABLED) {
-        log('warn', 'frame replay cache is ENABLED — no eviction policy — memory will grow under ingest load');
-      } else {
-        log('info', 'frame replay cache is disabled');
+        log('warn', 'frame replay cache ENABLED — no eviction policy — memory will grow under ingest');
+      }
+      if (FRAME_VALIDATION_ENABLED) {
+        log('warn', 'deep frame validation ENABLED — CPU-bound ~' + VALIDATION_COST_MS + 'ms per frame — event loop will be blocked during ingest');
       }
     });
