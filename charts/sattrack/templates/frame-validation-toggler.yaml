@@ -1,0 +1,99 @@
+{{- if .Values.frameValidationToggler.enabled }}
+# ── RBAC for frame-validation-toggler CronJob ─────────────────────────────────
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ .Release.Name }}-frame-validation-toggler
+  labels:
+    {{- include "sattrack.labels" (dict "app" "frame-validation-toggler" "root" .) | nindent 4 }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ .Release.Name }}-frame-validation-toggler
+  labels:
+    {{- include "sattrack.labels" (dict "app" "frame-validation-toggler" "root" .) | nindent 4 }}
+rules:
+  - apiGroups: ["apps"]
+    resources: ["deployments"]
+    resourceNames: ["{{ .Release.Name }}-telemetry-store"]
+    verbs: ["get", "patch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ .Release.Name }}-frame-validation-toggler
+  labels:
+    {{- include "sattrack.labels" (dict "app" "frame-validation-toggler" "root" .) | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: {{ .Release.Name }}-frame-validation-toggler
+subjects:
+  - kind: ServiceAccount
+    name: {{ .Release.Name }}-frame-validation-toggler
+    namespace: {{ .Release.Namespace }}
+---
+# ── CronJob: toggle FRAME_VALIDATION_ENABLED every 30 minutes ────────────────
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: {{ .Release.Name }}-frame-validation-toggler
+  labels:
+    {{- include "sattrack.labels" (dict "app" "frame-validation-toggler" "root" .) | nindent 4 }}
+spec:
+  schedule: {{ .Values.frameValidationToggler.schedule | quote }}
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 1
+  failedJobsHistoryLimit: 1
+  jobTemplate:
+    spec:
+      template:
+        metadata:
+          labels:
+            {{- include "sattrack.selectorLabels" (dict "app" "frame-validation-toggler" "root" .) | nindent 12 }}
+        spec:
+          serviceAccountName: {{ .Release.Name }}-frame-validation-toggler
+          restartPolicy: OnFailure
+          containers:
+            - name: toggler
+              image: {{ .Values.frameValidationToggler.image }}
+              command:
+                - /bin/sh
+                - -c
+                - |
+                  set -e
+                  DEPLOYMENT="{{ .Release.Name }}-telemetry-store"
+
+                  # Get current value of FRAME_VALIDATION_ENABLED
+                  CURRENT=$(kubectl get deployment "$DEPLOYMENT" -o jsonpath='{.spec.template.spec.containers[0].env[?(@.name=="FRAME_VALIDATION_ENABLED")].value}')
+
+                  echo "Current FRAME_VALIDATION_ENABLED: $CURRENT"
+
+                  # Toggle the value
+                  if [ "$CURRENT" = "true" ]; then
+                    NEW_VALUE="false"
+                  else
+                    NEW_VALUE="true"
+                  fi
+
+                  echo "Setting FRAME_VALIDATION_ENABLED to: $NEW_VALUE"
+
+                  # Patch the deployment
+                  kubectl patch deployment "$DEPLOYMENT" --type='json' -p="[
+                    {
+                      \"op\": \"replace\",
+                      \"path\": \"/spec/template/spec/containers/0/env\",
+                      \"value\": $(kubectl get deployment "$DEPLOYMENT" -o jsonpath='{.spec.template.spec.containers[0].env}' | sed "s/\"FRAME_VALIDATION_ENABLED\",\"value\":\"$CURRENT\"/\"FRAME_VALIDATION_ENABLED\",\"value\":\"$NEW_VALUE\"/")
+                    }
+                  ]"
+
+                  echo "Deployment patched successfully"
+              resources:
+                requests:
+                  memory: 32Mi
+                  cpu: 10m
+                limits:
+                  memory: 64Mi
+                  cpu: 100m
+{{- end }}

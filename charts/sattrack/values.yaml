@@ -35,7 +35,7 @@ telemetryStore:
   # Frame replay cache with no eviction policy. Grows at ~0.4MB/s under
   # normal ingest → OOMKill in ~5 minutes.
   # Fix: set to false
-  cacheEnabled: true
+  cacheEnabled: false
 
   # ── Exercise 2: latency ───────────────────────────────────────────────────
   # Deep frame validation — CPU-bound multi-pass signal anomaly check.
@@ -91,5 +91,13 @@ ingress:
   tls:
     enabled: true
     secretName: wildcard-tls
+
+# ── Frame Validation Toggler ─────────────────────────────────────────────────
+# CronJob that toggles telemetryStore.frameValidation every 30 minutes.
+# Useful for demos to simulate intermittent latency issues.
+frameValidationToggler:
+  enabled: false
+  schedule: "*/30 * * * *"
+  image: rancher/shell:latest
 
 replicaCount: 1
