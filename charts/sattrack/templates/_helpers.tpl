@@ -28,6 +28,8 @@ app.kubernetes.io/component: {{ .app }}
   sattrack.otelInitContainer — init container that installs OTel packages
   into an emptyDir shared with the main container.
 
+  Only rendered when otel.endpoint is set.
+
   Expects the pod spec to declare two volumes:
     - name: otel-src      (from the otel-tracing ConfigMap)
     - name: node-modules  (emptyDir)
@@ -35,6 +37,7 @@ app.kubernetes.io/component: {{ .app }}
   Usage: {{ include "sattrack.otelInitContainer" . }}
 */}}
 {{- define "sattrack.otelInitContainer" -}}
+{{- if .Values.otel.enabled }}
 - name: install-otel
   image: node:20-alpine
   command:
@@ -51,34 +54,43 @@ app.kubernetes.io/component: {{ .app }}
     - name: node-modules
       mountPath: /app
 {{- end }}
+{{- end }}
 
 {{/*
   sattrack.otelVolumes — the two volumes required by the OTel init container
   and main container volume mounts.
 
+  Only rendered when otel.endpoint is set.
+
   Usage: {{ include "sattrack.otelVolumes" . }}
 */}}
 {{- define "sattrack.otelVolumes" -}}
+{{- if .Values.otel.enabled }}
 - name: otel-src
   configMap:
     name: {{ .Release.Name }}-otel-tracing
 - name: node-modules
   emptyDir: {}
 {{- end }}
+{{- end }}
 
 {{/*
   sattrack.otelVolumeMounts — volume mounts for the main Node.js container
   to access tracing.js and node_modules installed by the init container.
 
+  Only rendered when otel.endpoint is set.
+
   Usage: {{ include "sattrack.otelVolumeMounts" . }}
 */}}
 {{- define "sattrack.otelVolumeMounts" -}}
+{{- if .Values.otel.enabled }}
 - name: node-modules
   mountPath: /app/tracing.js
   subPath: tracing.js
 - name: node-modules
   mountPath: /app/node_modules
   subPath: node_modules
+{{- end }}
 {{- end }}
 
 {{/*
@@ -97,14 +109,16 @@ app.kubernetes.io/component: {{ .app }}
 {{- end }}
 
 {{/*
-  sattrack.nodeCommand — standard command to start a Node.js service
-  with the OTel require hook.
+  sattrack.nodeCommand — standard command to start a Node.js service.
+  Includes the OTel require hook only when otel.endpoint is set.
 
   Usage: {{ include "sattrack.nodeCommand" . }}
 */}}
 {{- define "sattrack.nodeCommand" -}}
 - node
+{{- if .Values.otel.enabled }}
 - --require
 - /app/tracing.js
+{{- end }}
 - /app/server.js
 {{- end }}

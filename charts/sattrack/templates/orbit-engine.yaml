@@ -16,8 +16,10 @@ spec:
       annotations:
         checksum/config: {{ include (print $.Template.BasePath "/orbit-engine-configmap.yaml") . | sha256sum }}
     spec:
+      {{- if .Values.otel.enabled }}
       initContainers:
         {{- include "sattrack.otelInitContainer" . | nindent 8 }}
+      {{- end }}
       containers:
         - name: orbit-engine
           image: node:20-alpine

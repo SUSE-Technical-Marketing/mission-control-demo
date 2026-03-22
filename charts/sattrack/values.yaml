@@ -78,10 +78,12 @@ k6:
   rps: 2
 
 otel:
+  # Enable OpenTelemetry tracing. When false, skips the npm install init
+  # container entirely for faster startup.
+  enabled: false
   # OTLP HTTP endpoint for trace export.
   # Set to your SUSE Observability (or any OTel-compatible) collector.
   # Example: http://suse-observability-otel-collector:4318
-  # Leave empty to disable tracing (services start normally without it).
   endpoint: ""
 
 ingress:

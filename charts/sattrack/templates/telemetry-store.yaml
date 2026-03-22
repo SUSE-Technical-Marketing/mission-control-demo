@@ -16,8 +16,10 @@ spec:
       annotations:
         checksum/config: {{ include (print $.Template.BasePath "/telemetry-store-configmap.yaml") . | sha256sum }}
     spec:
+      {{- if .Values.otel.enabled }}
       initContainers:
         {{- include "sattrack.otelInitContainer" . | nindent 8 }}
+      {{- end }}
       containers:
         - name: telemetry-store
           image: node:20-alpine
