@@ -125,7 +125,7 @@ data:
       </header>
 
       <div class="voyager">
-        <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/6/60/Voyager_spacecraft_model.png/800px-Voyager_spacecraft_model.png" alt="Voyager Satellite">
+        <img src="https://upload.wikimedia.org/wikipedia/commons/6/60/Voyager_spacecraft_model.png" alt="Voyager Satellite">
       </div>
       <!-- Main Container -->
       <div class="container">
