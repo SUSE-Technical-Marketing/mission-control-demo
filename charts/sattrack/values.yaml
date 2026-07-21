@@ -95,7 +95,7 @@ sattrackUi:
   exposeLoadBalancer: false
   image:
     registry: ""
-    repository: library/nginx
+    repository: nginx
     tag: alpine
 
 k6:

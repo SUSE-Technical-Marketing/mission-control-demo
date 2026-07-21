@@ -48,7 +48,7 @@ api:
 ui:
   image:
     registry: ""
-    repository: library/nginx
+    repository: nginx
     tag: latest
   service:
     type: ClusterIP
