@@ -22,7 +22,8 @@ spec:
       {{- end }}
       containers:
         - name: telemetry-store
-          image: node:20-alpine
+          image: "{{ template "sattrack.registry" list . .Values.telemetryStore.image }}{{ .Values.telemetryStore.image.repository }}:{{ .Values.telemetryStore.image.tag }}"
+
           command:
             {{- include "sattrack.nodeCommand" . | nindent 12 }}
           ports:

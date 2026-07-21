@@ -39,7 +39,8 @@ spec:
       {{- end }}
       containers:
         - name: {{ .Release.Name }}-api
-          image: {{ .Values.api.image }}
+          image: "{{ template "aria.registry" list . .Values.api.image }}{{ .Values.api.image.repository }}:{{ .Values.api.image.tag }}"
+          imagePullPolicy: {{ default "IfNotPresent" .Values.api.image.pullPolicy }}
           command: ["node", "/app/server.js"]
           ports:
             - containerPort: 3000
@@ -47,7 +48,7 @@ spec:
             - name: EXPECTED_IMAGE_REPOSITORY
               value: {{ .Values.api.expectedImageRepository | quote }}
             - name: ACTUAL_IMAGE
-              value: {{ .Values.ui.image | quote }}
+              value: "{{ template "aria.registry" list . .Values.ui.image }}{{ .Values.ui.image.repository }}:{{ .Values.ui.image.tag }}"
             - name: PORT
               value: "3000"
           volumeMounts:

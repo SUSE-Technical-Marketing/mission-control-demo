@@ -19,6 +19,7 @@
 
 global:
   imagePullSecrets: []
+  imageRegistry: ""
 
 appco:
   pullSecret: ""
@@ -31,7 +32,10 @@ api:
     type: ClusterIP
     port: 3000
 
-  image: node:latest
+  image:
+    registry: ""
+    repository: node
+    tag: latest
 
   resources:
     requests:
@@ -42,7 +46,10 @@ api:
       memory: 128Mi
 
 ui:
-  image: nginx:latest
+  image:
+    registry: ""
+    repository: library/nginx
+    tag: latest
   service:
     type: ClusterIP
     port: 80

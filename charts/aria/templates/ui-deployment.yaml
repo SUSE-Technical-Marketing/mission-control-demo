@@ -39,7 +39,8 @@ spec:
       {{- end }}
       containers:
         - name: {{ .Release.Name }}-ui
-          image: {{ .Values.ui.image }}
+          image: "{{ template "aria.registry" list . .Values.ui.image }}{{ .Values.ui.image.repository }}:{{ .Values.ui.image.tag }}"
+          imagePullPolicy: {{ default "IfNotPresent" .Values.ui.image.pullPolicy }}
           ports:
             - containerPort: 80
           volumeMounts:

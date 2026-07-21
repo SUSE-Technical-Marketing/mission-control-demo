@@ -15,6 +15,10 @@
 #   4. helm upgrade sattrack ./helm/sattrack --set telemetryStore.cacheEnabled=false
 # ─────────────────────────────────────────────────────────────────────────────
 
+global:
+  imagePullSecrets: []
+  imageRegistry: ""
+
 orbitEngine:
   port: 3001
   # Total pass cycle in seconds. Divided equally across all 4 satellites so
@@ -22,12 +26,20 @@ orbitEngine:
   passCycleSecs: 300
   memoryRequest: 32Mi
   memoryLimit: 64Mi
+  image:
+    registry: ""
+    repository: node
+    tag: 20-alpine
 
 passPlanner:
   port: 3002
   upstreamTimeoutMs: 4000
   memoryRequest: 32Mi
   memoryLimit: 64Mi
+  image:
+    registry: ""
+    repository: node
+    tag: 20-alpine
 
 telemetryStore:
   port: 3003
@@ -50,6 +62,10 @@ telemetryStore:
   # frameValidationCostMs: 3500
   memoryRequest: 64Mi
   memoryLimit: 128Mi        # at 2MB/frame × 0.67 frames/s → OOMKill in ~95s
+  image:
+    registry: ""
+    repository: node
+    tag: 20-alpine
 
 satReceiver:
   port: 3004
@@ -57,20 +73,36 @@ satReceiver:
   upstreamTimeoutMs: 3000
   memoryRequest: 32Mi
   memoryLimit: 64Mi
+  image:
+    registry: ""
+    repository: node
+    tag: 20-alpine
 
 trackerApi:
   port: 3005
   upstreamTimeoutMs: 4000
   memoryRequest: 32Mi
   memoryLimit: 64Mi
+  image:
+    registry: ""
+    repository: node
+    tag: 20-alpine
 
 sattrackUi:
   port: 80
   memoryRequest: 16Mi
   memoryLimit: 32Mi
   exposeLoadBalancer: false
+  image:
+    registry: ""
+    repository: library/nginx
+    tag: alpine
 
 k6:
+  image:
+    registry: ""
+    repository: grafana/k6
+    tag: latest
   # Requests per second sent to tracker-api /dashboard
   # 2 RPS is enough to keep all topology edges warm in SUSE Observability
   # without generating noise. Raise to 10+ to make latency degradation

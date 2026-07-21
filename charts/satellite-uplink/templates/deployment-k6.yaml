@@ -12,7 +12,7 @@ spec:
     spec:
       containers:
       - name: k6
-        image: grafana/k6:latest
+        image: "{{ template "uplink.registry" list . .Values.k6.image }}{{ .Values.k6.image.repository }}:{{ .Values.k6.image.tag }}"
         command: ["k6", "run", "/scripts/load.js"]
         volumeMounts:
         - name: load-script

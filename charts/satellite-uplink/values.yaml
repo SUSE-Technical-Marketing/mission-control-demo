@@ -1,7 +1,11 @@
 global:
   imagePullSecrets: []
 # Pull the latest nginx image from Docker Hub
-image: nginx:latest
+image:
+  registry: ''
+  repository: library/nginx
+  tag: latest
+
 replicas: 1
 ingress:
   className: "traefik"
@@ -11,6 +15,11 @@ ingress:
   tls:
     secretName: wildcard-tls
 k6:
+  image:
+    registry: ''
+    repository: grafana/k6
+    tag: latest
+    pullPolicy: Always
   loadTest:
     duration: "60m"
     vus: 10

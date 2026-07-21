@@ -27,7 +27,7 @@ spec:
       {{- end }}
       containers:
       - name: nginx
-        image: {{ .Values.image }}
+        image: "{{ template "uplink.registry" list . .Values.image }}{{ .Values.image.repository }}:{{ .Values.image.tag }}"
         ports:
         - containerPort: 80
         volumeMounts:

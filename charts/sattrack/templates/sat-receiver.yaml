@@ -22,7 +22,7 @@ spec:
       {{- end }}
       containers:
         - name: sat-receiver
-          image: node:20-alpine
+          image: "{{ template "sattrack.registry" list . .Values.satReceiver.image }}{{ .Values.satReceiver.image.repository }}:{{ .Values.satReceiver.image.tag }}"
           command:
             {{- include "sattrack.nodeCommand" . | nindent 12 }}
           ports:

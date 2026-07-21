@@ -22,7 +22,7 @@ spec:
       {{- end }}
       containers:
         - name: orbit-engine
-          image: node:20-alpine
+          image: "{{ template "sattrack.registry" list . .Values.orbitEngine.image }}{{ .Values.orbitEngine.image.repository }}:{{ .Values.orbitEngine.image.tag }}"
           command:
             {{- include "sattrack.nodeCommand" . | nindent 12 }}
           ports:

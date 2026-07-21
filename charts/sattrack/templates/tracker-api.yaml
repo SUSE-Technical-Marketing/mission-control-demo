@@ -22,7 +22,7 @@ spec:
       {{- end }}
       containers:
         - name: tracker-api
-          image: node:20-alpine
+          image: "{{ template "sattrack.registry" list . .Values.trackerApi.image }}{{ .Values.trackerApi.image.repository }}:{{ .Values.trackerApi.image.tag }}"
           command:
             {{- include "sattrack.nodeCommand" . | nindent 12 }}
           ports:

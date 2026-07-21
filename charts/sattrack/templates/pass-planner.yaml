@@ -22,7 +22,7 @@ spec:
       {{- end }}
       containers:
         - name: pass-planner
-          image: node:20-alpine
+          image: "{{ template "sattrack.registry" list . .Values.passPlanner.image }}{{ .Values.passPlanner.image.repository }}:{{ .Values.passPlanner.image.tag }}"
           command:
             {{- include "sattrack.nodeCommand" . | nindent 12 }}
           ports:

@@ -18,7 +18,7 @@ spec:
     spec:
       containers:
         - name: sattrack-ui
-          image: nginx:alpine
+          image: "{{ template "sattrack.registry" list . .Values.sattrackUi.image }}{{ .Values.sattrackUi.image.repository }}:{{ .Values.sattrackUi.image.tag }}"
           ports:
             - containerPort: 80
           volumeMounts:

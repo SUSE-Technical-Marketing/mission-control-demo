@@ -2,6 +2,13 @@
   _helpers.tpl — reusable template fragments for the sattrack chart
 */}}
 
+{{- define "sattrack.registry" -}}
+{{- $root := index . 0 -}}
+{{- $component := index . 1 -}}
+{{- $reg := coalesce $root.Values.global.imageRegistry $component.registry -}}
+{{- if $reg }}{{ $reg }}/{{- end }}
+{{- end }}
+
 {{/*
   sattrack.labels — common labels applied to every resource
   Usage: {{ include "sattrack.labels" (dict "app" "orbit-engine" "root" .) }}
