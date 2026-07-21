@@ -1,10 +1,11 @@
 global:
   imagePullSecrets: []
 # Pull the latest nginx image from Docker Hub
-image:
-  registry: ''
-  repository: library/nginx
-  tag: latest
+nginx:
+  image:
+    registry: ''
+    repository: library/nginx
+    tag: latest
 
 replicas: 1
 ingress:
