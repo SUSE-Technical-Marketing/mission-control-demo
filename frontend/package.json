@@ -4,8 +4,9 @@
   "description": "React frontend for Space Station Control Center",
   "main": "index.js",
   "scripts": {
-    "start": "react-scripts start",
-    "build": "react-scripts build"
+    "start": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
   },
   "dependencies": {
     "react": "^19.0.0",
@@ -13,7 +14,8 @@
     "react-toastify": "^11.0.5"
   },
   "devDependencies": {
-    "react-scripts": "^0.0.0"
+    "@vitejs/plugin-react": "^4.3.4",
+    "vite": "^6.0.0"
   },
   "browserslist": {
     "production": [
