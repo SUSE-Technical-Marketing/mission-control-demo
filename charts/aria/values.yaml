@@ -19,7 +19,7 @@
 
 global:
   imagePullSecrets: []
-  imageRegistry: ""
+  imageRegistry: "docker.io/library"
 
 appco:
   pullSecret: ""

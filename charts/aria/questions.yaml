@@ -1,4 +1,10 @@
 questions:
+  - question: "Global Image Registry"
+    type: "string"
+    label: "Global Image Registry"
+    variable: "global.imageRegistry"
+    default: "docker.io/library"
+    help: "The global image registry to use for all images. If left empty, the default Docker Hub registry will be used."
   - question: "What is the host name for the ARIA ingress?"
     type: "string"
     label: "ARIA Ingress Host"

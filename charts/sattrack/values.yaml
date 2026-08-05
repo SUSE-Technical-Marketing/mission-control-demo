@@ -28,7 +28,7 @@ orbitEngine:
   memoryLimit: 64Mi
   image:
     registry: ""
-    repository: node
+    repository: library/node
     tag: 20-alpine
 
 passPlanner:
@@ -38,7 +38,7 @@ passPlanner:
   memoryLimit: 64Mi
   image:
     registry: ""
-    repository: node
+    repository: library/node
     tag: 20-alpine
 
 telemetryStore:
@@ -64,7 +64,7 @@ telemetryStore:
   memoryLimit: 128Mi        # at 2MB/frame × 0.67 frames/s → OOMKill in ~95s
   image:
     registry: ""
-    repository: node
+    repository: library/node
     tag: 20-alpine
 
 satReceiver:
@@ -75,7 +75,7 @@ satReceiver:
   memoryLimit: 64Mi
   image:
     registry: ""
-    repository: node
+    repository: library/node
     tag: 20-alpine
 
 trackerApi:
@@ -85,7 +85,7 @@ trackerApi:
   memoryLimit: 64Mi
   image:
     registry: ""
-    repository: node
+    repository: library/node
     tag: 20-alpine
 
 sattrackUi:
@@ -95,7 +95,7 @@ sattrackUi:
   exposeLoadBalancer: false
   image:
     registry: ""
-    repository: nginx
+    repository: library/nginx
     tag: alpine
 
 k6:
